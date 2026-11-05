@@ -4,3 +4,8 @@ dist/
 *.bak_*.dll
 addin/*.bak*
 .DS_Store
+
+.electron-data/
+.electron-data-ui/
+
+public/slides/
