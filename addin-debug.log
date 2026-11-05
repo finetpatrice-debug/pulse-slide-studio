@@ -1,0 +1,329 @@
+10:30:22.627 | OnConnection called
+10:30:22.647 | Polling timer started (350ms)
+10:30:22.782 | OnStartupComplete called
+10:30:25.964 | Initializing presentation (124 slides)
+10:30:26.652 | Added VoteEnDirect_BtnReset on slide 9
+10:30:26.935 | Added VoteEnDirect_BtnReset on slide 13
+10:30:27.051 | Added VoteEnDirect_BtnReset on slide 16
+10:30:27.191 | Added VoteEnDirect_BtnReset on slide 25
+10:30:27.335 | Added VoteEnDirect_BtnReset on slide 27
+10:30:27.490 | Added VoteEnDirect_BtnReset on slide 29
+10:30:27.636 | Added VoteEnDirect_BtnReset on slide 35
+10:30:27.756 | Added VoteEnDirect_BtnReset on slide 39
+10:30:27.878 | Added VoteEnDirect_BtnReset on slide 41
+10:30:28.002 | Added VoteEnDirect_BtnReset on slide 46
+10:30:28.128 | Added VoteEnDirect_BtnReset on slide 48
+10:30:28.262 | Added VoteEnDirect_BtnReset on slide 51
+10:30:28.489 | Added VoteEnDirect_BtnReset on slide 59
+10:30:29.041 | Navigated to voting slide: 10
+10:30:43.849 | Received CMD: GOTO:9
+10:30:44.926 | Received CMD: SAVE_PRES
+10:30:45.407 | Saved presentation
+10:31:07.228 | Received CMD: GOTO:10
+10:31:07.946 | Received CMD: SAVE_PRES
+10:31:07.948 | Saved presentation
+10:31:31.680 | Received CMD: GOTO:9
+10:32:10.051 | OnConnection called
+10:32:10.072 | Polling timer started (350ms)
+10:32:10.219 | OnStartupComplete called
+10:32:25.964 | Initializing presentation (124 slides)
+10:32:26.213 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.228 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.238 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.274 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.284 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.294 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.313 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.352 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.358 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.378 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.384 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.399 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.429 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:26.647 | Navigated to voting slide: 10
+10:32:34.937 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:47.914 | Button click (VOTE) detected in Normal Mode on slide 9
+10:32:48.074 | HandleToggleVoteOnSlide(9) -> OPENED|0|0|0|0
+10:32:48.084 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:32:54.760 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:33:11.733 | Button click (VOTE) detected in Normal Mode on slide 9
+10:33:11.813 | HandleToggleVoteOnSlide(9) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Proposition à voter
+10:33:11.813 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:33:11.874 | InsertResultSlideBelow err: Slides.Add : Invalid request.  Presentation cannot be modified.
+10:33:27.994 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:37:52.903 | Received CMD: GOTO:9
+10:37:53.268 | SetSlideButtonVisual err: Accès refusé. Vous ne disposez pas de privilèges suffisants pour terminer cette opération.
+10:45:00.327 | OnConnection called
+10:45:00.348 | Polling timer started (350ms)
+10:45:01.310 | OnStartupComplete called
+10:45:08.813 | Initializing presentation (124 slides)
+10:45:10.374 | Navigated to voting slide: 10
+10:46:41.807 | Button click (VOTE) detected in Normal Mode on slide 9
+10:46:41.935 | HandleToggleVoteOnSlide(9) -> OPENED|0|0|0|0
+10:48:39.904 | Received CMD: CLICK_BTN
+10:48:39.989 | HandleToggleVoteOnSlide(9) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Proposition à voter
+10:48:40.573 | Inserted Result Slide at index 10
+10:51:38.522 | Received CMD: CLICK_RESET
+10:51:38.537 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+10:53:06.496 | Received CMD: DELETE_SLIDE:10
+10:53:06.519 | Deleted slide 10
+10:53:07.212 | Received CMD: GOTO:9
+10:54:41.561 | OnConnection called
+10:54:41.581 | Polling timer started (350ms)
+10:54:41.738 | OnStartupComplete called
+10:54:45.833 | Initializing presentation (124 slides)
+10:54:47.504 | Navigated to voting slide: 10
+10:57:50.409 | Button click (RESET) detected in Normal Mode on slide 9
+10:57:50.425 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+10:57:59.377 | Button click (RESET) detected in Normal Mode on slide 9
+10:57:59.385 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+11:01:24.822 | OnConnection called
+11:01:24.842 | Mouse hook installed: 33228683
+11:01:24.842 | Polling timer started (120ms)
+11:01:24.979 | OnStartupComplete called
+11:01:29.248 | Initializing presentation (124 slides)
+11:01:30.860 | Navigated to voting slide: 10
+11:01:41.509 | SlideShow click on slide 9 at relX=0,65 relY=0,68
+11:01:41.548 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:01:41.692 | HandleToggleVoteOnSlide(9) -> OPENED|0|0|0|0
+11:01:55.743 | SlideShow click on slide 9 at relX=0,67 relY=0,67
+11:01:55.744 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:01:55.832 | HandleToggleVoteOnSlide(9) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Proposition à voter
+11:01:56.548 | Inserted Result Slide at index 10
+11:02:14.688 | SlideShow click on slide 9 at relX=0,69 relY=0,80
+11:02:14.714 | Button click (RESET) detected in SlideShow Mode on slide 9
+11:02:14.729 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+11:02:14.864 | Deleted Result Slide at index 10 during reset
+11:02:21.528 | SlideShow click on slide 9 at relX=0,69 relY=0,66
+11:02:21.529 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:02:21.602 | HandleToggleVoteOnSlide(9) -> OPENED|0|0|0|0
+11:02:30.774 | SlideShow click on slide 9 at relX=0,66 relY=0,67
+11:02:30.777 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:02:30.873 | HandleToggleVoteOnSlide(9) -> CLOSED_INSERT|1|0|0|1|100|0|0|38NKMQ|Votes : Proposition à voter
+11:02:31.067 | Inserted Result Slide at index 10
+11:08:41.573 | SlideShow click on slide 9 at relX=0,66 relY=0,80
+11:08:41.577 | Button click (RESET) detected in SlideShow Mode on slide 9
+11:08:41.584 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+11:08:41.693 | Deleted Result Slide at index 10 during reset
+11:08:48.631 | SlideShow click on slide 9 at relX=0,66 relY=0,69
+11:08:48.631 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:08:48.713 | HandleToggleVoteOnSlide(9) -> OPENED|0|0|0|0
+11:09:01.238 | SlideShow click on slide 9 at relX=0,62 relY=0,67
+11:09:01.240 | Button click (VOTE) detected in SlideShow Mode on slide 9
+11:09:01.319 | HandleToggleVoteOnSlide(9) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Proposition à voter
+11:09:01.529 | Inserted Result Slide at index 10
+11:10:46.195 | SlideShow click on slide 9 at relX=0,70 relY=0,80
+11:10:46.199 | Button click (RESET) detected in SlideShow Mode on slide 9
+11:10:46.205 | HandleResetVoteOnSlide(9) -> RESET|0|0|0|0
+11:10:46.316 | Deleted Result Slide at index 10 during reset
+11:12:20.976 | SlideShow click on slide 25 at relX=0,62 relY=0,66
+11:12:20.979 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:12:21.073 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:13:25.595 | SlideShow click on slide 25 at relX=0,63 relY=0,68
+11:13:25.595 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:13:25.663 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|1|0|0|0|0|1|100|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:13:25.896 | Inserted Result Slide at index 26
+11:13:43.039 | SlideShow click on slide 25 at relX=0,65 relY=0,80
+11:13:43.039 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:13:43.043 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:13:43.134 | Deleted Result Slide at index 26 during reset
+11:13:49.983 | SlideShow click on slide 27 at relX=0,60 relY=0,69
+11:13:49.985 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:13:50.073 | HandleToggleVoteOnSlide(27) -> OPENED|0|0|0|0
+11:13:56.595 | SlideShow click on slide 27 at relX=0,59 relY=0,68
+11:13:56.597 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:13:56.669 | HandleToggleVoteOnSlide(27) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : prérequis moniteur
+11:13:56.883 | Inserted Result Slide at index 28
+11:14:08.567 | SlideShow click on slide 27 at relX=0,65 relY=0,79
+11:14:08.569 | Button click (RESET) detected in SlideShow Mode on slide 27
+11:14:08.577 | HandleResetVoteOnSlide(27) -> RESET|0|0|0|0
+11:14:08.663 | Deleted Result Slide at index 28 during reset
+11:14:13.018 | SlideShow click on slide 27 at relX=0,65 relY=0,69
+11:14:13.018 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:14:13.093 | HandleToggleVoteOnSlide(27) -> OPENED|0|0|0|0
+11:14:18.406 | SlideShow click on slide 27 at relX=0,65 relY=0,70
+11:14:18.406 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:14:18.478 | HandleToggleVoteOnSlide(27) -> CLOSED_INSERT|0|0|0|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : prérequis moniteur
+11:14:18.683 | Inserted Result Slide at index 28
+11:14:28.759 | SlideShow click on slide 27 at relX=0,65 relY=0,70
+11:14:28.761 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:14:28.833 | HandleToggleVoteOnSlide(27) -> OPENED|0|0|0|0
+11:14:35.662 | SlideShow click on slide 27 at relX=0,65 relY=0,70
+11:14:35.663 | Button click (VOTE) detected in SlideShow Mode on slide 27
+11:14:35.743 | HandleToggleVoteOnSlide(27) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : prérequis moniteur
+11:14:36.000 | Inserted Result Slide at index 28
+11:14:54.033 | SlideShow click on slide 27 at relX=0,83 relY=0,93
+11:18:04.044 | SlideShow click on slide 27 at relX=0,64 relY=0,79
+11:18:04.048 | Button click (RESET) detected in SlideShow Mode on slide 27
+11:18:04.056 | HandleResetVoteOnSlide(27) -> RESET|0|0|0|0
+11:18:04.143 | Deleted Result Slide at index 28 during reset
+11:18:18.052 | OnConnection called
+11:18:18.078 | Mouse hook installed: 26810233
+11:18:18.079 | Polling timer started (120ms)
+11:18:18.216 | OnStartupComplete called
+11:18:24.209 | Initializing presentation (124 slides)
+11:18:26.124 | Navigated to voting slide: 10
+11:18:53.236 | SlideShow click on slide 25 at relX=0,84 relY=0,93
+11:18:54.784 | SlideShow click on slide 25 at relX=0,67 relY=0,70
+11:18:54.784 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:18:54.973 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:18:55.950 | SlideShow click on slide 25 at relX=0,67 relY=0,70
+11:18:55.953 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:18:56.041 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|0|0|0|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:18:56.748 | Inserted Result Slide at index 26
+11:18:56.767 | Auto-advanced to Result Slide 26
+11:19:07.878 | SlideShow click on slide 25 at relX=0,68 relY=0,80
+11:19:07.882 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:19:07.905 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:19:08.038 | Deleted Result Slide at index 26 during reset
+11:19:09.030 | SlideShow click on slide 25 at relX=0,68 relY=0,80
+11:19:09.030 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:19:09.034 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:19:14.593 | SlideShow click on slide 25 at relX=0,69 relY=0,70
+11:19:14.593 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:19:14.664 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:19:15.707 | SlideShow click on slide 25 at relX=0,69 relY=0,70
+11:19:15.708 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:19:15.814 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|0|0|0|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:19:16.045 | Inserted Result Slide at index 26
+11:19:16.057 | Auto-advanced to Result Slide 26
+11:19:33.436 | SlideShow click on slide 26 at relX=0,84 relY=0,93
+11:19:37.769 | SlideShow click on slide 25 at relX=0,71 relY=0,80
+11:19:37.770 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:19:37.774 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:19:37.883 | Deleted Result Slide at index 26 during reset
+11:19:38.914 | SlideShow click on slide 25 at relX=0,71 relY=0,80
+11:19:38.917 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:19:38.925 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:19:42.448 | SlideShow click on slide 25 at relX=0,68 relY=0,66
+11:19:42.449 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:19:42.543 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:19:43.565 | SlideShow click on slide 25 at relX=0,68 relY=0,66
+11:19:43.567 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:19:43.656 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|0|0|0|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:19:43.923 | Inserted Result Slide at index 26
+11:19:43.926 | Auto-advanced to Result Slide 26
+11:21:21.645 | Received CMD: DELETE_SLIDE:26
+11:21:21.687 | Deleted slide 26
+11:21:22.273 | Received CMD: GOTO:25
+11:22:15.936 | OnConnection called
+11:22:15.955 | Mouse hook installed: 59642963
+11:22:15.956 | Polling timer started (120ms)
+11:22:16.089 | OnStartupComplete called
+11:22:20.575 | Initializing presentation (124 slides)
+11:22:22.207 | Navigated to voting slide: 10
+11:22:32.063 | SlideShow click on slide 25 at relX=0,83 relY=0,93
+11:22:34.977 | SlideShow click on slide 25 at relX=0,69 relY=0,68
+11:22:34.977 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:22:35.191 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:22:47.073 | SlideShow click on slide 25 at relX=0,68 relY=0,68
+11:22:47.074 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:22:47.169 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|1|0|0|1|100|0|0|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:22:47.825 | Inserted Result Slide at index 26
+11:22:47.872 | Auto-advanced to Result Slide 26
+11:23:03.976 | SlideShow click on slide 25 at relX=0,67 relY=0,81
+11:23:03.976 | Button click (RESET) detected in SlideShow Mode on slide 25
+11:23:03.997 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+11:23:04.130 | Deleted Result Slide at index 26 during reset
+11:23:07.692 | SlideShow click on slide 25 at relX=0,67 relY=0,68
+11:23:07.693 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:23:07.793 | HandleToggleVoteOnSlide(25) -> OPENED|0|0|0|0
+11:23:19.037 | SlideShow click on slide 25 at relX=0,65 relY=0,69
+11:23:19.039 | Button click (VOTE) detected in SlideShow Mode on slide 25
+11:23:19.138 | HandleToggleVoteOnSlide(25) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Votes : Recyclage Moniteur : nouveau texte explicatif
+11:23:19.376 | Inserted Result Slide at index 26
+11:23:19.384 | Auto-advanced to Result Slide 26
+16:53:38.806 | SlideShow click on slide 25 at relX=0,84 relY=0,93
+16:53:40.800 | SlideShow click on slide 25 at relX=0,67 relY=0,80
+16:53:40.800 | Button click (RESET) detected in SlideShow Mode on slide 25
+16:53:40.815 | HandleResetVoteOnSlide(25) -> RESET|0|0|0|0
+16:53:40.951 | Deleted Result Slide at index 26 during reset
+17:04:42.183 | OnConnection called
+17:04:42.213 | Mouse hook installed: 16651677
+17:04:42.213 | Polling timer started (120ms)
+17:04:42.628 | OnStartupComplete called
+17:04:57.998 | Initializing presentation (13 slides)
+17:05:07.363 | Added VoteEnDirect_QR on slide 1
+17:05:07.523 | Added VoteEnDirect_BtnVote on slide 1
+17:05:07.616 | Added VoteEnDirect_BtnReset on slide 1
+17:06:08.973 | Added VoteEnDirect_QR on slide 3
+17:06:08.988 | Added VoteEnDirect_BtnVote on slide 3
+17:06:08.998 | Added VoteEnDirect_BtnReset on slide 3
+17:06:36.763 | Button click (VOTE) detected in Normal Mode on slide 3
+17:06:36.842 | HandleToggleVoteOnSlide(3) -> OPENED|0|0|0|0
+17:06:57.476 | Button click (VOTE) detected in Normal Mode on slide 3
+17:06:57.534 | HandleToggleVoteOnSlide(3) -> CLOSED_INSERT|1|1|100|0|0|0|0|38NKMQ|Proposition soumise au vote — Diapositive n°3
+17:06:58.113 | Inserted Result Slide at index 4
+17:06:58.135 | Auto-advanced to Result Slide 4
+17:07:10.249 | Button click (RESET) detected in Normal Mode on slide 3
+17:07:10.263 | HandleResetVoteOnSlide(3) -> RESET|0|0|0|0
+17:07:10.343 | Deleted Result Slide at index 4 during reset
+17:07:49.293 | OnConnection called
+17:07:49.323 | Mouse hook installed: 689508009
+17:07:49.324 | Polling timer started (120ms)
+17:07:49.473 | OnStartupComplete called
+17:07:54.906 | Initializing presentation (124 slides)
+17:07:56.526 | Navigated to voting slide: 10
+17:08:28.833 | OnConnection called
+17:08:28.849 | Mouse hook installed: 11012263
+17:08:28.849 | Polling timer started (120ms)
+17:08:28.973 | OnStartupComplete called
+17:08:30.199 | Initializing presentation (125 slides)
+17:08:30.507 | Added VoteEnDirect_QR on slide 9
+17:08:30.633 | Added VoteEnDirect_BtnVote on slide 9
+17:08:30.704 | Added VoteEnDirect_BtnReset on slide 9
+17:08:30.896 | Added VoteEnDirect_QR on slide 14
+17:08:30.906 | Added VoteEnDirect_BtnVote on slide 14
+17:08:30.913 | Added VoteEnDirect_BtnReset on slide 14
+17:08:30.983 | Added VoteEnDirect_QR on slide 17
+17:08:31.007 | Added VoteEnDirect_BtnVote on slide 17
+17:08:31.013 | Added VoteEnDirect_BtnReset on slide 17
+17:08:31.103 | Added VoteEnDirect_QR on slide 26
+17:08:31.113 | Added VoteEnDirect_BtnVote on slide 26
+17:08:31.118 | Added VoteEnDirect_BtnReset on slide 26
+17:08:31.193 | Added VoteEnDirect_QR on slide 28
+17:08:31.199 | Added VoteEnDirect_BtnVote on slide 28
+17:08:31.203 | Added VoteEnDirect_BtnReset on slide 28
+17:08:31.278 | Added VoteEnDirect_QR on slide 30
+17:08:31.288 | Added VoteEnDirect_BtnVote on slide 30
+17:08:31.294 | Added VoteEnDirect_BtnReset on slide 30
+17:08:31.383 | Added VoteEnDirect_QR on slide 36
+17:08:31.393 | Added VoteEnDirect_BtnVote on slide 36
+17:08:31.393 | Added VoteEnDirect_BtnReset on slide 36
+17:08:31.485 | Added VoteEnDirect_QR on slide 40
+17:08:31.493 | Added VoteEnDirect_BtnVote on slide 40
+17:08:31.503 | Added VoteEnDirect_BtnReset on slide 40
+17:08:31.573 | Added VoteEnDirect_QR on slide 42
+17:08:31.581 | Added VoteEnDirect_BtnVote on slide 42
+17:08:31.588 | Added VoteEnDirect_BtnReset on slide 42
+17:08:31.665 | Added VoteEnDirect_QR on slide 47
+17:08:31.683 | Added VoteEnDirect_BtnVote on slide 47
+17:08:31.699 | Added VoteEnDirect_BtnReset on slide 47
+17:08:31.773 | Added VoteEnDirect_QR on slide 49
+17:08:31.788 | Added VoteEnDirect_BtnVote on slide 49
+17:08:31.796 | Added VoteEnDirect_BtnReset on slide 49
+17:08:31.868 | Added VoteEnDirect_QR on slide 52
+17:08:31.878 | Added VoteEnDirect_BtnVote on slide 52
+17:08:31.884 | Added VoteEnDirect_BtnReset on slide 52
+17:08:31.973 | Added VoteEnDirect_QR on slide 60
+17:08:31.983 | Added VoteEnDirect_BtnVote on slide 60
+17:08:31.983 | Added VoteEnDirect_BtnReset on slide 60
+17:08:32.263 | Navigated to voting slide: 10
+17:09:46.463 | Button click (VOTE) detected in Normal Mode on slide 60
+17:09:46.623 | HandleToggleVoteOnSlide(60) -> OPENED|0|0|0|0
+17:10:16.379 | Button click (VOTE) detected in Normal Mode on slide 60
+17:10:16.462 | HandleToggleVoteOnSlide(60) -> CLOSED_INSERT|1|0|0|1|100|0|0|38NKMQ|Votes : Proposition de 3 qualifications
+17:10:17.265 | Inserted Result Slide at index 61
+17:10:17.282 | Auto-advanced to Result Slide 61
+17:10:36.553 | Button click (RESET) detected in Normal Mode on slide 60
+17:10:36.568 | HandleResetVoteOnSlide(60) -> RESET|0|0|0|0
+17:10:36.715 | Deleted Result Slide at index 61 during reset
+17:15:44.190 | Button click (VOTE) detected in Normal Mode on slide 49
+17:15:44.261 | HandleToggleVoteOnSlide(49) -> OPENED|0|0|0|0
+17:16:55.923 | Button click (VOTE) detected in Normal Mode on slide 49
+17:16:55.983 | HandleToggleVoteOnSlide(49) -> CLOSED_INSERT|3|2|67|1|33|0|0|38NKMQ|Votes : Critères d’évaluation des réanimations
+17:16:56.317 | Inserted Result Slide at index 50
+17:16:56.324 | Auto-advanced to Result Slide 50
+17:17:42.663 | Button click (RESET) detected in Normal Mode on slide 49
+17:17:42.668 | HandleResetVoteOnSlide(49) -> RESET|0|0|0|0
+17:17:42.763 | Deleted Result Slide at index 50 during reset
