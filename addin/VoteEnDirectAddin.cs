@@ -335,7 +335,16 @@ namespace VoteEnDirect
 
                         if (sName == "VoteEnDirect_QR")
                         {
-                            alreadyHasQr = true;
+                            string altTxt = "";
+                            try { altTxt = (string)shape.AlternativeText ?? ""; } catch { }
+                            if (altTxt == "GITHUB_PAGES_QR_V1")
+                            {
+                                alreadyHasQr = true;
+                            }
+                            else
+                            {
+                                oldLeftQrPic = shape;
+                            }
                         }
                         else if (sName.StartsWith("VoteEnDirect_BtnVote"))
                         {
@@ -403,6 +412,7 @@ namespace VoteEnDirect
                     {
                         dynamic newPic = slide.Shapes.AddPicture(qrFile, 0, -1, qrLeft, qrTop, qrSize, qrSize);
                         newPic.Name = "VoteEnDirect_QR";
+                        try { newPic.AlternativeText = "GITHUB_PAGES_QR_V1"; } catch { }
                         modified = true;
                         Log("Added VoteEnDirect_QR on slide " + (int)slide.SlideIndex);
                     }
