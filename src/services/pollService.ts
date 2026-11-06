@@ -786,9 +786,13 @@ export const pollService = {
           table: 'sessions',
           filter: `id=eq.${sessionId}`,
         },
-        (payload) => {
+        async (payload) => {
           if (payload.new && callbacks.onSessionUpdate) {
             callbacks.onSessionUpdate(payload.new as Session);
+          }
+          if (callbacks.onQuestionsChange) {
+            const list = await this.getQuestionsBySession(sessionId);
+            callbacks.onQuestionsChange(list);
           }
         }
       )
@@ -839,7 +843,28 @@ export const pollService = {
       )
       .subscribe();
 
+    const sbPollTimer =
+      typeof window !== 'undefined'
+        ? window.setInterval(async () => {
+            try {
+              if (callbacks.onSessionUpdate) {
+                const s = await this.getSessionById(sessionId);
+                if (s) callbacks.onSessionUpdate(s);
+              }
+              if (callbacks.onQuestionsChange) {
+                const q = await this.getQuestionsBySession(sessionId);
+                callbacks.onQuestionsChange(q);
+              }
+            } catch {
+              // Ignorer erreurs réseau temporaires sur GSM
+            }
+          }, 2500)
+        : null;
+
     return () => {
+      if (sbPollTimer !== null && typeof window !== 'undefined') {
+        window.clearInterval(sbPollTimer);
+      }
       void supabase.removeChannel(channel);
     };
   },
