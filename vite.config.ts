@@ -151,6 +151,16 @@ function localVoteApiPlugin(): Plugin {
             return { total, ouiCount, nonCount, abstCount, ouiPct, nonPct, abstPct };
           };
 
+          const readSlideDataUrl = (targetSlide: number): string | null => {
+            try {
+              const p = path.resolve(process.cwd(), 'public', 'slides', `slide-${targetSlide}.png`);
+              if (!fs.existsSync(p)) return null;
+              return `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
+            } catch {
+              return null;
+            }
+          };
+
           const activeQId = session.active_question_id ? String(session.active_question_id) : null;
           const activeQ = activeQId
             ? (db.questions || []).find((q) => String(q.id) === activeQId)
@@ -273,7 +283,7 @@ function localVoteApiPlugin(): Plugin {
 
           if (op === 'click') {
             if (!isOpen) {
-              // 1er clic : OUVRIR LE VOTE SUR CE SLIDE (et remplacer tout ancien vote sur ce même slide)
+              // 1er clic : OUVRIR LE VOTE SUR CE SLIDE (avec l'image exacte de la diapositive exportée par PowerPoint)
               const oldSameSlideIds = (db.questions || [])
                 .filter((q) => Number(q.slide_number) === slideNum)
                 .map((q) => String(q.id));
@@ -284,19 +294,21 @@ function localVoteApiPlugin(): Plugin {
               }
               for (const q of db.questions || []) {
                 q.is_open = false;
+                q.correct_option = null;
               }
               const newId = crypto.randomUUID();
               const qTitle =
                 rawTitle.length > 0
                   ? rawTitle
                   : `Proposition soumise au vote — Diapositive n°${slideNum}`;
+              const slideDataUrl = readSlideDataUrl(slideNum);
               const newQ: Record<string, unknown> = {
                 id: newId,
                 session_id: String(session.id),
                 title: qTitle,
                 type: 'mcq',
                 options: ['OUI', 'NON', 'ABSTENTION'],
-                correct_option: null,
+                correct_option: slideDataUrl,
                 slide_number: slideNum,
                 is_open: true,
                 order_index: (db.questions || []).length + 1,
@@ -319,7 +331,7 @@ function localVoteApiPlugin(): Plugin {
                     }
                     await sb
                       .from('questions')
-                      .update({ is_open: false })
+                      .update({ is_open: false, correct_option: null })
                       .eq('session_id', String(session.id));
                     await sb.from('questions').insert(newQ);
                     await sb
@@ -335,7 +347,7 @@ function localVoteApiPlugin(): Plugin {
               }
               return;
             } else if (activeQ) {
-              // 2e clic : CLÔTURER LE VOTE & RENVOYER LES RÉSULTATS EN < 450ms
+              // 2e clic : CLÔTURER LE VOTE & AFFICHER LE RÉSULTAT SUR LE GSM ET DANS POWERPOINT
               if (sb) {
                 try {
                   const sbVotes = await Promise.race([
@@ -355,15 +367,17 @@ function localVoteApiPlugin(): Plugin {
                 } catch {}
               }
 
+              const closedQId = String(activeQ.id);
               activeQ.is_open = false;
               for (const q of db.questions || []) {
-                if (String(q.id) !== String(activeQ.id) && Number(q.slide_number) > slideNum) {
+                if (String(q.id) !== closedQId && Number(q.slide_number) > slideNum) {
                   q.slide_number = Number(q.slide_number) + 1;
                 }
               }
-              session.active_question_id = null;
+              // Conserver active_question_id sur la question clôturée avec show_results=true pour afficher le résultat sur le GSM
+              session.active_question_id = closedQId;
               session.show_results = true;
-              const st = getStatsForQuestion(String(activeQ.id));
+              const st = getStatsForQuestion(closedQId);
               const qTitle = String(activeQ.title || `Diapositive ${slideNum}`).replace(/\|/g, '-');
               const sCode = String(session.code || '38NKMQ');
               saveServerDb(db);
@@ -374,7 +388,6 @@ function localVoteApiPlugin(): Plugin {
               );
 
               if (sb) {
-                const closedQId = String(activeQ.id);
                 const shiftedQuestions = (db.questions || []).filter(
                   (q) => String(q.id) !== closedQId
                 );
@@ -383,7 +396,7 @@ function localVoteApiPlugin(): Plugin {
                     await sb.from('questions').update({ is_open: false }).eq('id', closedQId);
                     await sb
                       .from('sessions')
-                      .update({ active_question_id: null, show_results: true })
+                      .update({ active_question_id: closedQId, show_results: true })
                       .eq('id', String(session.id));
                     for (const q of shiftedQuestions) {
                       await sb

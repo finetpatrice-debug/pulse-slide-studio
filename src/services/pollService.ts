@@ -285,11 +285,29 @@ export const pollService = {
       .from('questions')
       .select('*')
       .eq('session_id', sessionId)
+      .neq('title', '__SLIDE_PREVIEW__')
       .order('order_index', { ascending: true })
       .order('created_at', { ascending: true });
 
     if (error) throw new Error(`Erreur chargement questions : ${error.message}`);
     return (data ?? []).map((row) => normalizeQuestion(row as Record<string, unknown>));
+  },
+
+  async getSlidePreviewDataUrl(slideNumber: number): Promise<string | null> {
+    if (!isSupabaseConfigured || slideNumber < 1) return null;
+    try {
+      const previewId =
+        '00000000-0000-4000-8000-' + String(slideNumber).padStart(12, '0');
+      const { data } = await supabase
+        .from('questions')
+        .select('correct_option')
+        .eq('id', previewId)
+        .maybeSingle();
+      const val = (data as { correct_option?: string | null } | null)?.correct_option;
+      return val && val.startsWith('data:image/') ? val : null;
+    } catch {
+      return null;
+    }
   },
 
   async getQuestionById(questionId: string): Promise<Question | null> {

@@ -6,16 +6,13 @@ import {
   MinusCircle,
   Radio,
   User,
-  Lock,
   RefreshCw,
   LogOut,
-  Layers,
   AlertCircle,
   Vote as VoteIcon,
   Send,
   Maximize2,
   X,
-  ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { pollService } from '../services/pollService';
@@ -45,16 +42,6 @@ export default function ParticipantJoinPage() {
     [allQuestions]
   );
 
-  const slidePreviewMap = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const q of allQuestions) {
-      if (q.title === '__SLIDE_PREVIEW__' && q.correct_option?.startsWith('data:image/')) {
-        m.set(q.slide_number, q.correct_option);
-      }
-    }
-    return m;
-  }, [allQuestions]);
-
   // État du vote pour la diapositive active :
   // 1) draftChoice : choix pré-sélectionné par le votant avant d'appuyer sur "Valider"
   // 2) selectedAnswer & voteConfirmed : vote définitivement validé et verrouillé
@@ -66,7 +53,13 @@ export default function ParticipantJoinPage() {
   // Aperçu de l'image de la diapositive PowerPoint en haut du GSM
   const [slideImgFailed, setSlideImgFailed] = useState(false);
   const [isSlideZoomed, setIsSlideZoomed] = useState(false);
-  const [manualSlideNumber, setManualSlideNumber] = useState<number | null>(null);
+  const [dismissedQuestionId, setDismissedQuestionId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('pulseslide_dismissed_q') || null;
+    } catch {
+      return null;
+    }
+  });
 
   // 1. Chargement initial de la séance
   useEffect(() => {
@@ -148,36 +141,23 @@ export default function ParticipantJoinPage() {
   }, [session?.id]);
 
   const activeQuestion = useMemo(() => {
-    if (!session?.active_question_id) return null;
-    return questions.find((q) => q.id === session.active_question_id) ?? null;
-  }, [session?.active_question_id, questions]);
+    if (session?.active_question_id) {
+      const byActiveId = questions.find((q) => q.id === session.active_question_id);
+      if (byActiveId) return byActiveId;
+    }
+    const openQ = questions.find((q) => q.is_open);
+    if (openQ) return openQ;
+    if (session?.show_results && questions.length > 0) {
+      return questions[questions.length - 1];
+    }
+    return null;
+  }, [session?.active_question_id, session?.show_results, questions]);
 
-  const liveSlideNumber =
-    (activeQuestion?.is_open ? activeQuestion.slide_number : null) ||
-    session?.current_slide ||
-    1;
-
-  // Quand PowerPoint change de diapositive ou qu'un vote s'ouvre, suivre automatiquement le direct
-  useEffect(() => {
-    setManualSlideNumber(null);
-  }, [liveSlideNumber, activeQuestion?.id, activeQuestion?.is_open]);
-
-  const activeSlideNumber = manualSlideNumber ?? liveSlideNumber;
-
-  // Question associée à la diapositive affichée (ex: Dia 9 de vote ou Dia 10 de résultat)
-  const slideQuestion = useMemo(() => {
-    const reversed = [...questions].reverse();
-    const exactMatch = reversed.find((q) => q.slide_number === activeSlideNumber);
-    if (exactMatch) return exactMatch;
-    const resultSlideMatch = reversed.find(
-      (q) => !q.is_open && q.slide_number + 1 === activeSlideNumber
-    );
-    return resultSlideMatch ?? null;
-  }, [questions, activeSlideNumber]);
+  const activeSlideNumber = activeQuestion?.slide_number || session?.current_slide || 1;
 
   const slideVoteStats = useMemo(() => {
-    if (!slideQuestion) return null;
-    const qVotes = sessionVotes.filter((v) => v.question_id === slideQuestion.id);
+    if (!activeQuestion) return null;
+    const qVotes = sessionVotes.filter((v) => v.question_id === activeQuestion.id);
     const total = qVotes.length;
     let ouiCount = 0;
     let nonCount = 0;
@@ -195,7 +175,7 @@ export default function ParticipantJoinPage() {
       ? qVotes.find((v) => v.participant_id === participant.id)?.answer || null
       : null;
     return {
-      question: slideQuestion,
+      question: activeQuestion,
       total,
       ouiCount,
       nonCount,
@@ -205,35 +185,27 @@ export default function ParticipantJoinPage() {
       abstPct,
       myVote,
     };
-  }, [slideQuestion, sessionVotes, participant]);
+  }, [activeQuestion, sessionVotes, participant]);
 
-  const handlePrevViewedSlide = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setManualSlideNumber(Math.max(1, activeSlideNumber - 1));
+  const handleWaitForNextVote = (questionId: string) => {
+    setDismissedQuestionId(questionId);
+    setIsSlideZoomed(false);
+    try {
+      localStorage.setItem('pulseslide_dismissed_q', questionId);
+    } catch {}
   };
 
-  const handleNextViewedSlide = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setManualSlideNumber(activeSlideNumber + 1);
-  };
-
-  const handleReturnToLiveSlide = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setManualSlideNumber(null);
-  };
-
-  // Réinitialiser l'état d'erreur d'image quand on change de slide
+  // Réinitialiser l'état d'erreur d'image quand la question active change
   useEffect(() => {
     setSlideImgFailed(false);
-  }, [activeSlideNumber, activeQuestion?.id, activeQuestion?.correct_option, slideQuestion?.id]);
+  }, [activeQuestion?.id, activeQuestion?.correct_option]);
 
   // 3. Charger le vote existant du participant lorsque le texte soumis au vote change
   useEffect(() => {
     let cancelled = false;
 
     async function loadExistingVote() {
-      const targetQ = activeQuestion || slideQuestion;
-      if (!targetQ || !participant) {
+      if (!activeQuestion || !participant) {
         setDraftChoice('');
         setSelectedAnswer('');
         setVoteConfirmed(false);
@@ -241,7 +213,7 @@ export default function ParticipantJoinPage() {
       }
 
       const existingVote = await pollService.getParticipantVoteForQuestion(
-        targetQ.id,
+        activeQuestion.id,
         participant.id
       );
       if (cancelled) return;
@@ -261,7 +233,7 @@ export default function ParticipantJoinPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeQuestion?.id, slideQuestion?.id, participant?.id]);
+  }, [activeQuestion?.id, participant?.id]);
 
   // Inscription rapide
   const handleJoinSubmit = async (e: React.FormEvent) => {
@@ -463,25 +435,23 @@ export default function ParticipantJoinPage() {
       : ['OUI', 'NON', 'ABSTENTION'];
 
   const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
-  const liveOrSlideQuestion =
-    activeQuestion && activeSlideNumber === activeQuestion.slide_number
-      ? activeQuestion
-      : slideQuestion && activeSlideNumber === slideQuestion.slide_number
-      ? slideQuestion
-      : null;
-  const previewDataUrl = slidePreviewMap.get(activeSlideNumber);
-  const slideImageUrl =
-    previewDataUrl
-      ? previewDataUrl
-      : liveOrSlideQuestion?.correct_option?.startsWith('data:image/')
-      ? liveOrSlideQuestion.correct_option
-      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106e`;
+  const slideImageUrl = activeQuestion?.correct_option?.startsWith('data:image/')
+    ? activeQuestion.correct_option
+    : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106g`;
 
-  // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
+  const isVotingOpen = Boolean(activeQuestion && activeQuestion.is_open);
+  const isShowingClosedResult = Boolean(
+    activeQuestion &&
+      !activeQuestion.is_open &&
+      slideVoteStats &&
+      dismissedQuestionId !== activeQuestion.id
+  );
+
+  // ÉCRAN 2 : CONNECTÉ — 3 ÉTATS : (1) VOTE EN COURS, (2) RÉSULTAT AFFICHÉ, (3) EN ATTENTE DU VOTE SUIVANT
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col">
-      {/* Modale plein écran pour zoomer sur la diapositive PowerPoint */}
-      {isSlideZoomed && !slideImgFailed && (
+      {/* Modale plein écran pour zoomer sur la diapositive du vote */}
+      {isSlideZoomed && !slideImgFailed && (isVotingOpen || isShowingClosedResult) && (
         <div
           className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-3"
           onClick={() => setIsSlideZoomed(false)}
@@ -490,37 +460,9 @@ export default function ParticipantJoinPage() {
             className="w-full max-w-3xl flex items-center justify-between mb-3 px-1 gap-2"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handlePrevViewedSlide}
-                disabled={activeSlideNumber <= 1}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1 border border-white/15"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Préc.
-              </button>
-              <span className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-                Dia {activeSlideNumber}
-              </span>
-              <button
-                type="button"
-                onClick={handleNextViewedSlide}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1 border border-white/15"
-              >
-                Suiv.
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              {activeSlideNumber !== liveSlideNumber && (
-                <button
-                  type="button"
-                  onClick={handleReturnToLiveSlide}
-                  className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold"
-                >
-                  Direct ({liveSlideNumber})
-                </button>
-              )}
-            </div>
+            <span className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+              Diapositive du scrutin
+            </span>
             <button
               type="button"
               onClick={() => setIsSlideZoomed(false)}
@@ -532,11 +474,11 @@ export default function ParticipantJoinPage() {
           </div>
           <img
             src={slideImageUrl}
-            alt={`Diapositive ${activeSlideNumber}`}
+            alt="Diapositive du vote"
             className="w-full max-w-3xl rounded-2xl border border-white/20 shadow-2xl bg-white object-contain"
           />
           <p className="text-xs text-slate-400 mt-3">
-            Utilisez ◀ Préc. / Suiv. ▶ pour parcourir les diapositives ou touchez l'écran pour revenir au vote
+            Touchez l'écran pour revenir au scrutin
           </p>
         </div>
       )}
@@ -553,27 +495,6 @@ export default function ParticipantJoinPage() {
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
-            type="button"
-            onClick={handlePrevViewedSlide}
-            disabled={activeSlideNumber <= 1}
-            title="Diapositive précédente"
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-white/10 text-slate-200 transition"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <div className="px-2.5 py-1 rounded-xl bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Dia {activeSlideNumber}</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleNextViewedSlide}
-            title="Diapositive suivante"
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 transition"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <button
             onClick={handleLeaveParticipant}
             title="Changer de participant"
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
@@ -584,228 +505,27 @@ export default function ParticipantJoinPage() {
       </header>
 
       <main className="flex-1 flex flex-col justify-start p-4 sm:p-5 max-w-md w-full mx-auto">
-        {!activeQuestion || !activeQuestion.is_open || voteConfirmed ? (
-          /* ÉCRAN D'ATTENTE DU VOTE SUIVANT (affiché avant l'ouverture ET dès que le vote définitif est validé) */
-          <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-5 text-center shadow-2xl my-auto space-y-4">
-            {(voteConfirmed && selectedAnswer) || slideVoteStats?.myVote ? (
-              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2.5 shadow-md">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span className="text-sm font-extrabold text-emerald-100">
-                  Vote définitif validé : {slideVoteStats?.myVote || selectedAnswer}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={handlePrevViewedSlide}
-                disabled={activeSlideNumber <= 1}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-1"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                Dia préc.
-              </button>
-              <span className="text-xs font-bold text-indigo-300">
-                Diapositive {activeSlideNumber}
-                {activeSlideNumber !== liveSlideNumber ? ` (Direct : ${liveSlideNumber})` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={handleNextViewedSlide}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-1"
-              >
-                Dia suiv.
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {activeSlideNumber !== liveSlideNumber && (
-              <button
-                type="button"
-                onClick={handleReturnToLiveSlide}
-                className="w-full py-1.5 rounded-xl bg-emerald-600/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold"
-              >
-                Revenir à la diapositive en direct (Dia {liveSlideNumber})
-              </button>
-            )}
-            {!slideImgFailed && (
-              <div
-                onClick={() => setIsSlideZoomed(true)}
-                className="relative rounded-2xl overflow-hidden border border-white/15 bg-white shadow-lg cursor-zoom-in"
-              >
-                <img
-                  src={slideImageUrl}
-                  alt={`Slide ${activeSlideNumber}`}
-                  onError={() => setSlideImgFailed(true)}
-                  className="w-full h-auto block object-contain"
-                />
-              </div>
-            )}
-
-            {/* RÉSULTAT DU VOTE POUR CETTE DIAPOSITIVE UNE FOIS CLÔTURÉ */}
-            {slideVoteStats && !slideVoteStats.question.is_open ? (
-              <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-4 text-left space-y-3 shadow-lg">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
-                    Résultat du vote — Dia {slideVoteStats.question.slide_number}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-400">
-                    {slideVoteStats.total} vote(s)
-                  </span>
-                </div>
-                <p className="text-sm font-bold text-white leading-snug">
-                  {slideVoteStats.question.title}
-                </p>
-
-                {/* Bandeau Verdict */}
-                <div
-                  className={`py-2 px-3 rounded-xl text-center text-xs font-black uppercase tracking-wide text-white ${
-                    slideVoteStats.ouiCount > slideVoteStats.nonCount
-                      ? 'bg-emerald-600'
-                      : slideVoteStats.nonCount > slideVoteStats.ouiCount
-                      ? 'bg-rose-600'
-                      : 'bg-amber-600'
-                  }`}
-                >
-                  {slideVoteStats.ouiCount > slideVoteStats.nonCount
-                    ? `Proposition adoptée (OUI : ${slideVoteStats.ouiPct} %)`
-                    : slideVoteStats.nonCount > slideVoteStats.ouiCount
-                    ? `Proposition rejetée (NON : ${slideVoteStats.nonPct} %)`
-                    : `Égalité des voix (OUI : ${slideVoteStats.ouiPct} % | NON : ${slideVoteStats.nonPct} %)`}
-                </div>
-
-                {/* Barres OUI / NON / ABSTENTION */}
-                <div className="space-y-2 pt-1">
-                  {[
-                    {
-                      label: 'OUI',
-                      count: slideVoteStats.ouiCount,
-                      pct: slideVoteStats.ouiPct,
-                      barClass: 'bg-emerald-500',
-                      badgeClass: 'bg-emerald-600 text-white',
-                    },
-                    {
-                      label: 'NON',
-                      count: slideVoteStats.nonCount,
-                      pct: slideVoteStats.nonPct,
-                      barClass: 'bg-rose-500',
-                      badgeClass: 'bg-rose-600 text-white',
-                    },
-                    {
-                      label: 'ABSTENTION',
-                      count: slideVoteStats.abstCount,
-                      pct: slideVoteStats.abstPct,
-                      barClass: 'bg-sky-500',
-                      badgeClass: 'bg-sky-600 text-white',
-                    },
-                  ].map((row) => (
-                    <div key={row.label} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs font-bold">
-                        <span className={`px-2 py-0.5 rounded-md ${row.badgeClass}`}>
-                          {row.label}
-                        </span>
-                        <span className="text-slate-200">
-                          {row.count} voix ({row.pct} %)
-                        </span>
-                      </div>
-                      <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${row.barClass} transition-all duration-300`}
-                          style={{ width: `${Math.max(row.pct, 4)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
-                  <Radio className="w-6 h-6 text-emerald-400 animate-pulse" />
-                </div>
-                <h2 className="text-lg font-bold text-white">
-                  {voteConfirmed ? 'En attente du vote suivant...' : 'Vous êtes prêt à voter'}
-                </h2>
-                <p className="text-slate-300 text-sm leading-relaxed">
-                  {voteConfirmed ? (
-                    <>
-                      Votre vote a bien été enregistré. Dès que l'orateur lancera le{' '}
-                      <strong>prochain vote</strong>, les boutons s'afficheront ici automatiquement.
-                    </>
-                  ) : (
-                    <>
-                      Dès que l'orateur ouvre le vote sur une diapositive, les boutons{' '}
-                      <strong>OUI / NON / ABSTENTION</strong> s'afficheront ici automatiquement.
-                    </>
-                  )}
-                </p>
-              </>
-            )}
-          </div>
-        ) : (
-          /* ÉCRAN DE VOTE : SLIDE EN HAUT + OUI / NON / ABSTENTION + BOUTON VALIDER EN BAS */
+        {isVotingOpen && activeQuestion ? (
+          /* ÉTAT 1 : SCRUTIN OUVERT — AFFICHAGE DE LA DIA + VOTE OUI / NON / ABSTENTION */
           <div className="space-y-4">
-            {/* 1. EN HAUT : VISUEL DE LA DIAPOSITIVE POWERPOINT SUR LAQUELLE ON VOTE */}
             <div className="bg-slate-900 border border-white/15 rounded-3xl p-3.5 shadow-xl space-y-2.5">
-              <div className="flex items-center justify-between gap-1.5 px-1 flex-wrap">
-                <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  Vote en cours
+                </span>
+                {!slideImgFailed && (
                   <button
                     type="button"
-                    onClick={handlePrevViewedSlide}
-                    disabled={activeSlideNumber <= 1}
-                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-0.5"
+                    onClick={() => setIsSlideZoomed(true)}
+                    className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    Préc.
+                    <Maximize2 className="w-3 h-3 text-indigo-400" />
+                    Agrandir la dia
                   </button>
-                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    Dia {activeSlideNumber}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleNextViewedSlide}
-                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-0.5"
-                  >
-                    Suiv.
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {activeSlideNumber !== liveSlideNumber && (
-                    <button
-                      type="button"
-                      onClick={handleReturnToLiveSlide}
-                      className="text-xs font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30"
-                    >
-                      Direct ({liveSlideNumber})
-                    </button>
-                  )}
-                  {!slideImgFailed && (
-                    <button
-                      type="button"
-                      onClick={() => setIsSlideZoomed(true)}
-                      className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
-                    >
-                      <Maximize2 className="w-3 h-3 text-indigo-400" />
-                      Agrandir
-                    </button>
-                  )}
-
-                  {activeQuestion.is_open ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                      Scrutin ouvert
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400">
-                      <Lock className="w-3.5 h-3.5" />
-                      Scrutin clôturé
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Miniature de la vraie slide PowerPoint */}
               {!slideImgFailed && (
                 <div
                   onClick={() => setIsSlideZoomed(true)}
@@ -813,7 +533,7 @@ export default function ParticipantJoinPage() {
                 >
                   <img
                     src={slideImageUrl}
-                    alt={`Slide ${activeSlideNumber}`}
+                    alt="Diapositive soumise au vote"
                     onError={() => setSlideImgFailed(true)}
                     className="w-full h-auto block object-contain"
                   />
@@ -832,7 +552,6 @@ export default function ParticipantJoinPage() {
               </div>
             )}
 
-            {/* 2. LES 3 BOUTONS DE CHOIX : OUI / NON / ABSTENTION */}
             <div className="space-y-2.5">
               {choices.map((option) => {
                 const upper = option.trim().toUpperCase();
@@ -853,7 +572,7 @@ export default function ParticipantJoinPage() {
                   IconComponent = XCircle;
                 }
 
-                const isDisabled = !activeQuestion.is_open || voteConfirmed || submittingVote;
+                const isDisabled = voteConfirmed || submittingVote;
 
                 return (
                   <button
@@ -886,21 +605,20 @@ export default function ParticipantJoinPage() {
               })}
             </div>
 
-            {/* 3. EN BAS : BOUTON "VALIDER MON VOTE" (OU CONFIRMATION DÉFINITIVE VERROUILLÉE) */}
             <div className="pt-1 pb-4">
               {voteConfirmed && selectedAnswer ? (
                 <div className="p-4 rounded-2xl bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center gap-3 shadow-lg">
                   <CheckCircle2 className="w-7 h-7 text-emerald-400 shrink-0" />
                   <div>
                     <p className="text-sm sm:text-base font-extrabold text-white">
-                      Vote définitif enregistré : {selectedAnswer}
+                      Vote enregistré : {selectedAnswer}
                     </p>
                     <p className="text-xs text-emerald-200/90">
-                      Votre vote est verrouillé pour cette diapositive.
+                      En attente de la clôture du vote pour afficher le résultat...
                     </p>
                   </div>
                 </div>
-              ) : activeQuestion.is_open ? (
+              ) : (
                 <button
                   type="button"
                   disabled={!draftChoice || submittingVote}
@@ -920,8 +638,131 @@ export default function ParticipantJoinPage() {
                       : '1. Choisissez OUI / NON / ABSTENTION puis validez'}
                   </span>
                 </button>
-              ) : null}
+              )}
             </div>
+          </div>
+        ) : isShowingClosedResult && slideVoteStats ? (
+          /* ÉTAT 2 : VOTE TERMINÉ — AFFICHAGE DU RÉSULTAT + BOUTON POUR SE METTRE EN ATTENTE DU VOTE SUIVANT */
+          <div className="bg-slate-900/90 border border-white/15 rounded-3xl p-5 shadow-2xl my-auto space-y-4">
+            {(slideVoteStats.myVote || selectedAnswer) && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2.5 shadow-md">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span className="text-sm font-extrabold text-emerald-100">
+                  Votre vote : {slideVoteStats.myVote || selectedAnswer}
+                </span>
+              </div>
+            )}
+
+            {!slideImgFailed && (
+              <div
+                onClick={() => setIsSlideZoomed(true)}
+                className="relative rounded-2xl overflow-hidden border border-white/15 bg-white shadow-lg cursor-zoom-in"
+              >
+                <img
+                  src={slideImageUrl}
+                  alt="Diapositive votée"
+                  onError={() => setSlideImgFailed(true)}
+                  className="w-full h-auto block object-contain"
+                />
+              </div>
+            )}
+
+            <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-4 text-left space-y-3 shadow-lg">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
+                  Résultat du vote
+                </span>
+                <span className="text-xs font-semibold text-slate-400">
+                  {slideVoteStats.total} vote(s)
+                </span>
+              </div>
+              <p className="text-sm font-bold text-white leading-snug">
+                {slideVoteStats.question.title}
+              </p>
+
+              <div
+                className={`py-2.5 px-3 rounded-xl text-center text-xs sm:text-sm font-black uppercase tracking-wide text-white ${
+                  slideVoteStats.ouiCount > slideVoteStats.nonCount
+                    ? 'bg-emerald-600'
+                    : slideVoteStats.nonCount > slideVoteStats.ouiCount
+                    ? 'bg-rose-600'
+                    : 'bg-amber-600'
+                }`}
+              >
+                {slideVoteStats.ouiCount > slideVoteStats.nonCount
+                  ? `Proposition adoptée (OUI : ${slideVoteStats.ouiPct} %)`
+                  : slideVoteStats.nonCount > slideVoteStats.ouiCount
+                  ? `Proposition rejetée (NON : ${slideVoteStats.nonPct} %)`
+                  : `Égalité des voix (OUI : ${slideVoteStats.ouiPct} % | NON : ${slideVoteStats.nonPct} %)`}
+              </div>
+
+              <div className="space-y-2.5 pt-1">
+                {[
+                  {
+                    label: 'OUI',
+                    count: slideVoteStats.ouiCount,
+                    pct: slideVoteStats.ouiPct,
+                    barClass: 'bg-emerald-500',
+                    badgeClass: 'bg-emerald-600 text-white',
+                  },
+                  {
+                    label: 'NON',
+                    count: slideVoteStats.nonCount,
+                    pct: slideVoteStats.nonPct,
+                    barClass: 'bg-rose-500',
+                    badgeClass: 'bg-rose-600 text-white',
+                  },
+                  {
+                    label: 'ABSTENTION',
+                    count: slideVoteStats.abstCount,
+                    pct: slideVoteStats.abstPct,
+                    barClass: 'bg-sky-500',
+                    badgeClass: 'bg-sky-600 text-white',
+                  },
+                ].map((row) => (
+                  <div key={row.label} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className={`px-2 py-0.5 rounded-md ${row.badgeClass}`}>
+                        {row.label}
+                      </span>
+                      <span className="text-slate-200">
+                        {row.count} voix ({row.pct} %)
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${row.barClass} transition-all duration-300`}
+                        style={{ width: `${Math.max(row.pct, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleWaitForNextVote(slideVoteStats.question.id)}
+              className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-400 hover:to-violet-500 active:scale-[0.98] text-white font-extrabold text-sm sm:text-base shadow-xl transition flex items-center justify-center gap-2 ring-2 ring-white/40"
+            >
+              <span>Se mettre en attente pour le vote suivant</span>
+              <ChevronRight className="w-5 h-5 shrink-0" />
+            </button>
+          </div>
+        ) : (
+          /* ÉTAT 3 : EN ATTENTE DU VOTE SUIVANT (AUCUNE DIAPOSITIVE AFFICHÉE HORS SCRUTIN) */
+          <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 text-center shadow-2xl my-auto space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
+              <Radio className="w-7 h-7 text-emerald-400 animate-pulse" />
+            </div>
+            <h2 className="text-lg sm:text-xl font-bold text-white">
+              En attente pour le vote suivant
+            </h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Dès que l'orateur lance le prochain scrutin dans PowerPoint, la{' '}
+              <strong>diapositive</strong> et les boutons{' '}
+              <strong>OUI / NON / ABSTENTION</strong> s'afficheront ici automatiquement.
+            </p>
           </div>
         )}
       </main>
