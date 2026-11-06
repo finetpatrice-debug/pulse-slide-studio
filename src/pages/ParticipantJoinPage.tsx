@@ -53,6 +53,7 @@ export default function ParticipantJoinPage() {
   // Aperçu de l'image de la diapositive PowerPoint en haut du GSM
   const [slideImgFailed, setSlideImgFailed] = useState(false);
   const [isSlideZoomed, setIsSlideZoomed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [dismissedQuestionId, setDismissedQuestionId] = useState<string | null>(() => {
     try {
       return localStorage.getItem('pulseslide_dismissed_q') || null;
@@ -60,6 +61,29 @@ export default function ParticipantJoinPage() {
       return null;
     }
   });
+
+  const tryEnterFullscreen = () => {
+    try {
+      const docEl = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void>;
+      };
+      if (!document.fullscreenElement) {
+        if (docEl.requestFullscreen) {
+          void docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          void docEl.webkitRequestFullscreen();
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
 
   // 1. Chargement initial de la séance
   useEffect(() => {
@@ -188,6 +212,7 @@ export default function ParticipantJoinPage() {
   }, [activeQuestion, sessionVotes, participant]);
 
   const handleWaitForNextVote = (questionId: string) => {
+    tryEnterFullscreen();
     setDismissedQuestionId(questionId);
     setIsSlideZoomed(false);
     try {
@@ -238,6 +263,7 @@ export default function ParticipantJoinPage() {
   // Inscription rapide
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    tryEnterFullscreen();
     setError(null);
 
     const targetCode = (sessionCode || codeInput).trim().toUpperCase();
@@ -290,6 +316,7 @@ export default function ParticipantJoinPage() {
 
   // Étape 1 : Sélectionner une option (sans encore l'envoyer)
   const handleSelectDraftChoice = (choice: string) => {
+    tryEnterFullscreen();
     if (!activeQuestion || !activeQuestion.is_open || voteConfirmed || submittingVote) {
       return;
     }
@@ -449,7 +476,12 @@ export default function ParticipantJoinPage() {
 
   // ÉCRAN 2 : CONNECTÉ — 3 ÉTATS : (1) VOTE EN COURS, (2) RÉSULTAT AFFICHÉ, (3) EN ATTENTE DU VOTE SUIVANT
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col">
+    <div
+      onClick={() => {
+        if (!isFullscreen) tryEnterFullscreen();
+      }}
+      className="min-h-[100dvh] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col justify-between"
+    >
       {/* Modale plein écran pour zoomer sur la diapositive du vote */}
       {isSlideZoomed && !slideImgFailed && (isVotingOpen || isShowingClosedResult) && (
         <div
@@ -483,76 +515,74 @@ export default function ParticipantJoinPage() {
         </div>
       )}
 
-      {/* Barre supérieure */}
-      <header className="px-4 py-3 bg-slate-900/90 border-b border-white/10 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <div className="truncate">
-            <p className="text-xs text-slate-400 truncate">{session.title}</p>
-            <p className="text-sm font-bold text-white truncate">{participant.nickname}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={handleLeaveParticipant}
-            title="Changer de participant"
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
-      <main className="flex-1 flex flex-col justify-start p-4 sm:p-5 max-w-md w-full mx-auto">
+      <main className="flex-1 flex flex-col justify-center p-2.5 sm:p-4 max-w-md w-full mx-auto">
         {isVotingOpen && activeQuestion ? (
-          /* ÉTAT 1 : SCRUTIN OUVERT — AFFICHAGE DE LA DIA + VOTE OUI / NON / ABSTENTION */
-          <div className="space-y-4">
-            <div className="bg-slate-900 border border-white/15 rounded-3xl p-3.5 shadow-xl space-y-2.5">
-              <div className="flex items-center justify-between gap-2 px-1">
+          /* ÉTAT 1 : SCRUTIN OUVERT — AFFICHAGE COMPACT SUR 1 SEUL ÉCRAN (DIA + OUI / NON / ABSTENTION + VALIDER) */
+          <div className="space-y-2.5 my-auto">
+            <div className="bg-slate-900 border border-white/15 rounded-2xl p-2.5 shadow-xl space-y-2">
+              <div className="flex items-center justify-between gap-1.5 px-1">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Vote en cours
+                  Vote en cours ({participant.nickname})
                 </span>
-                {!slideImgFailed && (
-                  <button
-                    type="button"
-                    onClick={() => setIsSlideZoomed(true)}
-                    className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
-                  >
-                    <Maximize2 className="w-3 h-3 text-indigo-400" />
-                    Agrandir la dia
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {!isFullscreen && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tryEnterFullscreen();
+                      }}
+                      className="text-[11px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/40 inline-flex items-center gap-1"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      Plein écran
+                    </button>
+                  )}
+                  {!slideImgFailed && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tryEnterFullscreen();
+                        setIsSlideZoomed(true);
+                      }}
+                      className="text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
+                    >
+                      <Maximize2 className="w-3 h-3 text-indigo-400" />
+                      Loupe
+                    </button>
+                  )}
+                </div>
               </div>
 
               {!slideImgFailed && (
                 <div
                   onClick={() => setIsSlideZoomed(true)}
-                  className="relative rounded-2xl overflow-hidden border border-white/20 bg-white shadow-md cursor-zoom-in group"
+                  className="relative rounded-xl overflow-hidden border border-white/20 bg-white shadow-md cursor-zoom-in flex items-center justify-center"
                 >
                   <img
                     src={slideImageUrl}
                     alt="Diapositive soumise au vote"
                     onError={() => setSlideImgFailed(true)}
-                    className="w-full h-auto block object-contain"
+                    className="w-full max-h-[28dvh] h-auto block object-contain mx-auto"
                   />
                 </div>
               )}
 
-              <h2 className="text-sm sm:text-base font-extrabold text-white leading-snug px-1">
+              <h2 className="text-xs sm:text-sm font-extrabold text-white leading-snug px-1 line-clamp-2">
                 {activeQuestion.title}
               </h2>
             </div>
 
             {error && (
-              <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2">
+              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {choices.map((option) => {
                 const upper = option.trim().toUpperCase();
                 const currentHighlighted = voteConfirmed ? selectedAnswer : draftChoice;
@@ -580,23 +610,23 @@ export default function ParticipantJoinPage() {
                     type="button"
                     disabled={isDisabled}
                     onClick={() => handleSelectDraftChoice(option)}
-                    className={`w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r ${btnStyle} border-2 transition-all active:scale-[0.98] shadow-xl flex items-center justify-between ${
+                    className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r ${btnStyle} border-2 transition-all active:scale-[0.98] shadow-lg flex items-center justify-between ${
                       isSelected
                         ? 'ring-4 ring-white border-white scale-[1.01] opacity-100'
                         : voteConfirmed
                         ? 'opacity-40'
-                        : 'opacity-85 hover:opacity-100'
+                        : 'opacity-90 hover:opacity-100'
                     } ${isDisabled ? 'cursor-not-allowed' : ''}`}
                   >
-                    <div className="flex items-center gap-3.5">
-                      <IconComponent className="w-7 h-7 text-white shrink-0" />
-                      <span className="text-xl sm:text-2xl font-black tracking-wide text-white uppercase">
+                    <div className="flex items-center gap-3">
+                      <IconComponent className="w-6 h-6 text-white shrink-0" />
+                      <span className="text-lg sm:text-xl font-black tracking-wide text-white uppercase">
                         {option}
                       </span>
                     </div>
 
                     {isSelected && (
-                      <span className="px-3 py-1 rounded-full bg-white text-slate-950 text-xs font-extrabold uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-950 text-xs font-extrabold uppercase">
                         {voteConfirmed ? 'Validé' : 'Sélectionné'}
                       </span>
                     )}
@@ -605,12 +635,12 @@ export default function ParticipantJoinPage() {
               })}
             </div>
 
-            <div className="pt-1 pb-4">
+            <div className="pt-0.5">
               {voteConfirmed && selectedAnswer ? (
-                <div className="p-4 rounded-2xl bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center gap-3 shadow-lg">
-                  <CheckCircle2 className="w-7 h-7 text-emerald-400 shrink-0" />
+                <div className="p-3 rounded-2xl bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center gap-3 shadow-lg">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
                   <div>
-                    <p className="text-sm sm:text-base font-extrabold text-white">
+                    <p className="text-sm font-extrabold text-white">
                       Vote enregistré : {selectedAnswer}
                     </p>
                     <p className="text-xs text-emerald-200/90">
@@ -623,13 +653,13 @@ export default function ParticipantJoinPage() {
                   type="button"
                   disabled={!draftChoice || submittingVote}
                   onClick={handleConfirmVote}
-                  className={`w-full py-4 px-5 rounded-2xl font-extrabold text-base sm:text-lg shadow-2xl transition-all flex items-center justify-center gap-2.5 ${
+                  className={`w-full py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base shadow-2xl transition-all flex items-center justify-center gap-2 ${
                     draftChoice
                       ? 'bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white ring-2 ring-white/80 active:scale-[0.98]'
                       : 'bg-slate-800/80 border border-white/15 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send className="w-5 h-5 shrink-0" />
+                  <Send className="w-4 h-4 shrink-0" />
                   <span>
                     {submittingVote
                       ? 'Enregistrement en cours...'
@@ -643,11 +673,11 @@ export default function ParticipantJoinPage() {
           </div>
         ) : isShowingClosedResult && slideVoteStats ? (
           /* ÉTAT 2 : VOTE TERMINÉ — AFFICHAGE DU RÉSULTAT + BOUTON POUR SE METTRE EN ATTENTE DU VOTE SUIVANT */
-          <div className="bg-slate-900/90 border border-white/15 rounded-3xl p-5 shadow-2xl my-auto space-y-4">
+          <div className="bg-slate-900/90 border border-white/15 rounded-3xl p-4 shadow-2xl my-auto space-y-3">
             {(slideVoteStats.myVote || selectedAnswer) && (
-              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2.5 shadow-md">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span className="text-sm font-extrabold text-emerald-100">
+              <div className="py-2 px-3 rounded-xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2 shadow-md">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs sm:text-sm font-extrabold text-emerald-100">
                   Votre vote : {slideVoteStats.myVote || selectedAnswer}
                 </span>
               </div>
@@ -656,18 +686,18 @@ export default function ParticipantJoinPage() {
             {!slideImgFailed && (
               <div
                 onClick={() => setIsSlideZoomed(true)}
-                className="relative rounded-2xl overflow-hidden border border-white/15 bg-white shadow-lg cursor-zoom-in"
+                className="relative rounded-xl overflow-hidden border border-white/15 bg-white shadow-lg cursor-zoom-in flex items-center justify-center"
               >
                 <img
                   src={slideImageUrl}
                   alt="Diapositive votée"
                   onError={() => setSlideImgFailed(true)}
-                  className="w-full h-auto block object-contain"
+                  className="w-full max-h-[25dvh] h-auto block object-contain mx-auto"
                 />
               </div>
             )}
 
-            <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-4 text-left space-y-3 shadow-lg">
+            <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-3.5 text-left space-y-2.5 shadow-lg">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
                   Résultat du vote
@@ -676,12 +706,12 @@ export default function ParticipantJoinPage() {
                   {slideVoteStats.total} vote(s)
                 </span>
               </div>
-              <p className="text-sm font-bold text-white leading-snug">
+              <p className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
                 {slideVoteStats.question.title}
               </p>
 
               <div
-                className={`py-2.5 px-3 rounded-xl text-center text-xs sm:text-sm font-black uppercase tracking-wide text-white ${
+                className={`py-2 px-3 rounded-xl text-center text-xs sm:text-sm font-black uppercase tracking-wide text-white ${
                   slideVoteStats.ouiCount > slideVoteStats.nonCount
                     ? 'bg-emerald-600'
                     : slideVoteStats.nonCount > slideVoteStats.ouiCount
@@ -696,7 +726,7 @@ export default function ParticipantJoinPage() {
                   : `Égalité des voix (OUI : ${slideVoteStats.ouiPct} % | NON : ${slideVoteStats.nonPct} %)`}
               </div>
 
-              <div className="space-y-2.5 pt-1">
+              <div className="space-y-2 pt-0.5">
                 {[
                   {
                     label: 'OUI',
@@ -729,7 +759,7 @@ export default function ParticipantJoinPage() {
                         {row.count} voix ({row.pct} %)
                       </span>
                     </div>
-                    <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${row.barClass} transition-all duration-300`}
                         style={{ width: `${Math.max(row.pct, 4)}%` }}
@@ -743,7 +773,7 @@ export default function ParticipantJoinPage() {
             <button
               type="button"
               onClick={() => handleWaitForNextVote(slideVoteStats.question.id)}
-              className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-400 hover:to-violet-500 active:scale-[0.98] text-white font-extrabold text-sm sm:text-base shadow-xl transition flex items-center justify-center gap-2 ring-2 ring-white/40"
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-400 hover:to-violet-500 active:scale-[0.98] text-white font-extrabold text-sm sm:text-base shadow-xl transition flex items-center justify-center gap-2 ring-2 ring-white/40"
             >
               <span>Se mettre en attente pour le vote suivant</span>
               <ChevronRight className="w-5 h-5 shrink-0" />
@@ -752,6 +782,32 @@ export default function ParticipantJoinPage() {
         ) : (
           /* ÉTAT 3 : EN ATTENTE DU VOTE SUIVANT (AUCUNE DIAPOSITIVE AFFICHÉE HORS SCRUTIN) */
           <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 text-center shadow-2xl my-auto space-y-4">
+            <div className="flex items-center justify-between text-xs text-slate-400 pb-1 border-b border-white/10">
+              <span className="font-semibold text-white truncate">{participant.nickname}</span>
+              <div className="flex items-center gap-2">
+                {!isFullscreen && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      tryEnterFullscreen();
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold inline-flex items-center gap-1"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    Plein écran
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLeaveParticipant}
+                  title="Changer de participant"
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
               <Radio className="w-7 h-7 text-emerald-400 animate-pulse" />
             </div>
