@@ -157,6 +157,35 @@ function localVoteApiPlugin(): Plugin {
             : null;
           const isOpen = Boolean(activeQ && activeQ.is_open === true);
 
+          const syncSlidePreviewToSupabase = async (targetSlide: number) => {
+            if (!sb) return;
+            try {
+              const slideFile = path.resolve(
+                process.cwd(),
+                'public',
+                'slides',
+                `slide-${targetSlide}.png`
+              );
+              if (!fs.existsSync(slideFile)) return;
+              const buf = fs.readFileSync(slideFile);
+              if (buf.length <= 0 || buf.length >= 1500000) return;
+              const slideDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+              const previewId =
+                '00000000-0000-4000-8000-' + String(targetSlide).padStart(12, '0');
+              await sb.from('questions').upsert({
+                id: previewId,
+                session_id: String(session.id),
+                title: '__SLIDE_PREVIEW__',
+                type: 'mcq',
+                options: ['OUI', 'NON', 'ABSTENTION'],
+                correct_option: slideDataUrl,
+                slide_number: targetSlide,
+                is_open: false,
+                order_index: -targetSlide,
+              });
+            } catch {}
+          };
+
           if (op === 'slide') {
             if (session.current_slide !== slideNum) {
               session.current_slide = slideNum;
@@ -176,6 +205,7 @@ function localVoteApiPlugin(): Plugin {
                 } catch {}
               }
             }
+            void syncSlidePreviewToSupabase(slideNum);
             res.statusCode = 200;
             res.end('OK');
             return;
@@ -191,6 +221,7 @@ function localVoteApiPlugin(): Plugin {
                   .update({ current_slide: slideNum })
                   .eq('id', String(session.id));
               }
+              void syncSlidePreviewToSupabase(slideNum);
             }
             if (pendingPptCommand) {
               const cmdToRun = pendingPptCommand;
@@ -354,6 +385,10 @@ function localVoteApiPlugin(): Plugin {
               const qTitle = String(activeQ.title || `Diapositive ${slideNum}`).replace(/\|/g, '-');
               const sCode = String(session.code || '38NKMQ');
               saveServerDb(db);
+              setTimeout(() => {
+                void syncSlidePreviewToSupabase(slideNum);
+                void syncSlidePreviewToSupabase(slideNum + 1);
+              }, 800);
 
               res.statusCode = 200;
               res.end(

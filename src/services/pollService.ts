@@ -882,7 +882,8 @@ export const pollService = {
     participants: Participant[],
     votes: Vote[]
   ): void {
-    const questionMap = new Map(questions.map((q) => [q.id, q]));
+    const realQuestions = questions.filter((q) => q.title !== '__SLIDE_PREVIEW__');
+    const questionMap = new Map(realQuestions.map((q) => [q.id, q]));
     const participantMap = new Map(participants.map((p) => [p.id, p]));
 
     const escapeCsv = (val: string | number | null | undefined): string => {
@@ -942,7 +943,7 @@ export const pollService = {
 
     // Si aucun vote n'a encore été enregistré, on exporte au moins la liste des questions préparées
     if (votes.length === 0) {
-      for (const q of questions) {
+      for (const q of realQuestions) {
         const validCorrectOption =
           q.correct_option && !q.correct_option.startsWith('data:image/')
             ? q.correct_option

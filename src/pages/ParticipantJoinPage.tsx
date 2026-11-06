@@ -36,9 +36,24 @@ export default function ParticipantJoinPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [session, setSession] = useState<Session | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [sessionVotes, setSessionVotes] = useState<Vote[]>([]);
   const [participant, setParticipant] = useState<Participant | null>(null);
+
+  const questions = useMemo(
+    () => allQuestions.filter((q) => q.title !== '__SLIDE_PREVIEW__'),
+    [allQuestions]
+  );
+
+  const slidePreviewMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const q of allQuestions) {
+      if (q.title === '__SLIDE_PREVIEW__' && q.correct_option?.startsWith('data:image/')) {
+        m.set(q.slide_number, q.correct_option);
+      }
+    }
+    return m;
+  }, [allQuestions]);
 
   // État du vote pour la diapositive active :
   // 1) draftChoice : choix pré-sélectionné par le votant avant d'appuyer sur "Valider"
@@ -84,7 +99,7 @@ export default function ParticipantJoinPage() {
           pollService.getVotesBySession(foundSession.id),
         ]);
         if (!cancelled) {
-          setQuestions(sessionQuestions);
+          setAllQuestions(sessionQuestions);
           setSessionVotes(initialVotes);
         }
 
@@ -125,7 +140,7 @@ export default function ParticipantJoinPage() {
 
     const unsubscribe = pollService.subscribeToSessionRealtime(session.id, {
       onSessionUpdate: (updatedSession) => setSession(updatedSession),
-      onQuestionsChange: (updatedQuestions) => setQuestions(updatedQuestions),
+      onQuestionsChange: (updatedQuestions) => setAllQuestions(updatedQuestions),
       onVotesChange: (updatedVotes) => setSessionVotes(updatedVotes),
     });
 
@@ -277,7 +292,7 @@ export default function ParticipantJoinPage() {
           pollService.getQuestionsBySession(currentSession.id),
           pollService.getVotesBySession(currentSession.id),
         ]);
-        setQuestions(qList);
+        setAllQuestions(qList);
         setSessionVotes(vList);
       }
 
@@ -454,10 +469,13 @@ export default function ParticipantJoinPage() {
       : slideQuestion && activeSlideNumber === slideQuestion.slide_number
       ? slideQuestion
       : null;
+  const previewDataUrl = slidePreviewMap.get(activeSlideNumber);
   const slideImageUrl =
-    liveOrSlideQuestion?.correct_option?.startsWith('data:image/')
+    previewDataUrl
+      ? previewDataUrl
+      : liveOrSlideQuestion?.correct_option?.startsWith('data:image/')
       ? liveOrSlideQuestion.correct_option
-      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106c`;
+      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106d`;
 
   // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
   return (
