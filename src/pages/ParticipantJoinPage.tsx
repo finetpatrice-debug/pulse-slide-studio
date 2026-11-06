@@ -475,7 +475,7 @@ export default function ParticipantJoinPage() {
       ? previewDataUrl
       : liveOrSlideQuestion?.correct_option?.startsWith('data:image/')
       ? liveOrSlideQuestion.correct_option
-      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106d`;
+      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106e`;
 
   // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
   return (
@@ -641,8 +641,8 @@ export default function ParticipantJoinPage() {
               </div>
             )}
 
-            {/* RÉSULTAT DU VOTE POUR CETTE DIAPOSITIVE (OU SA DIAPO DE RÉSULTAT) */}
-            {slideVoteStats && (
+            {/* RÉSULTAT DU VOTE POUR CETTE DIAPOSITIVE UNE FOIS CLÔTURÉ */}
+            {slideVoteStats && !slideVoteStats.question.is_open ? (
               <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-4 text-left space-y-3 shadow-lg">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
@@ -717,39 +717,7 @@ export default function ParticipantJoinPage() {
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Accès rapide aux diapositives votées */}
-            {questions.length > 0 && (
-              <div className="pt-1 text-left space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
-                  Votes réalisés ({questions.length}) :
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {questions.map((q) => {
-                    const isViewingThis =
-                      activeSlideNumber === q.slide_number ||
-                      (!q.is_open && activeSlideNumber === q.slide_number + 1);
-                    return (
-                      <button
-                        key={q.id}
-                        type="button"
-                        onClick={() => setManualSlideNumber(q.slide_number)}
-                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                          isViewingThis
-                            ? 'bg-indigo-600 border-indigo-400 text-white'
-                            : 'bg-slate-800/90 hover:bg-slate-700 border-white/10 text-slate-200'
-                        }`}
-                      >
-                        Dia {q.slide_number} {q.is_open ? '• En cours' : '• Résultat'}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {!slideVoteStats && (
+            ) : (
               <>
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
                   <Radio className="w-6 h-6 text-emerald-400 animate-pulse" />

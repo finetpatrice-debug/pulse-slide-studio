@@ -157,55 +157,17 @@ function localVoteApiPlugin(): Plugin {
             : null;
           const isOpen = Boolean(activeQ && activeQ.is_open === true);
 
-          const syncSlidePreviewToSupabase = async (targetSlide: number) => {
-            if (!sb) return;
-            try {
-              const slideFile = path.resolve(
-                process.cwd(),
-                'public',
-                'slides',
-                `slide-${targetSlide}.png`
-              );
-              if (!fs.existsSync(slideFile)) return;
-              const buf = fs.readFileSync(slideFile);
-              if (buf.length <= 0 || buf.length >= 1500000) return;
-              const slideDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
-              const previewId =
-                '00000000-0000-4000-8000-' + String(targetSlide).padStart(12, '0');
-              await sb.from('questions').upsert({
-                id: previewId,
-                session_id: String(session.id),
-                title: '__SLIDE_PREVIEW__',
-                type: 'mcq',
-                options: ['OUI', 'NON', 'ABSTENTION'],
-                correct_option: slideDataUrl,
-                slide_number: targetSlide,
-                is_open: false,
-                order_index: -targetSlide,
-              });
-            } catch {}
-          };
-
           if (op === 'slide') {
             if (session.current_slide !== slideNum) {
               session.current_slide = slideNum;
               saveServerDb(db);
               if (sb) {
-                try {
-                  await sb.from('sessions').upsert({
-                    id: String(session.id),
-                    code: String(session.code || '38NKMQ'),
-                    title: String(session.title || 'Séance de Vote PowerPoint'),
-                    current_slide: slideNum,
-                    active_question_id: session.active_question_id || null,
-                    show_results: Boolean(session.show_results),
-                    reveal_answer: false,
-                    is_active: true,
-                  });
-                } catch {}
+                void sb
+                  .from('sessions')
+                  .update({ current_slide: slideNum })
+                  .eq('id', String(session.id));
               }
             }
-            void syncSlidePreviewToSupabase(slideNum);
             res.statusCode = 200;
             res.end('OK');
             return;
@@ -221,7 +183,6 @@ function localVoteApiPlugin(): Plugin {
                   .update({ current_slide: slideNum })
                   .eq('id', String(session.id));
               }
-              void syncSlidePreviewToSupabase(slideNum);
             }
             if (pendingPptCommand) {
               const cmdToRun = pendingPptCommand;
@@ -232,19 +193,25 @@ function localVoteApiPlugin(): Plugin {
             }
             if (isOpen && activeQ) {
               if (sb) {
-                try {
-                  const { data: sbVotes } = await sb
-                    .from('votes')
-                    .select('*')
-                    .eq('question_id', String(activeQ.id));
-                  if (Array.isArray(sbVotes)) {
-                    const otherVotes = (db.votes || []).filter(
-                      (v) => String(v.question_id) !== String(activeQ.id)
-                    );
-                    db.votes = [...otherVotes, ...(sbVotes as Array<Record<string, unknown>>)];
-                    saveServerDb(db);
-                  }
-                } catch {}
+                void (async () => {
+                  try {
+                    const { data: sbVotes } = await sb
+                      .from('votes')
+                      .select('*')
+                      .eq('question_id', String(activeQ.id));
+                    if (Array.isArray(sbVotes)) {
+                      const latestDb = loadServerDb();
+                      const otherVotes = (latestDb.votes || []).filter(
+                        (v) => String(v.question_id) !== String(activeQ.id)
+                      );
+                      latestDb.votes = [
+                        ...otherVotes,
+                        ...(sbVotes as Array<Record<string, unknown>>),
+                      ];
+                      saveServerDb(latestDb);
+                    }
+                  } catch {}
+                })();
               }
               const st = getStatsForQuestion(String(activeQ.id));
               res.statusCode = 200;
@@ -266,32 +233,55 @@ function localVoteApiPlugin(): Plugin {
             db.votes = (db.votes || []).filter((v) => !slideQuestionIds.has(String(v.question_id)));
             for (const q of db.questions) {
               q.is_open = false;
+              if (Number(q.slide_number) > slideNum) {
+                q.slide_number = Number(q.slide_number) - 1;
+              }
             }
             session.current_slide = slideNum;
             session.active_question_id = null;
             session.show_results = false;
             saveServerDb(db);
 
-            if (sb) {
-              try {
-                await sb
-                  .from('sessions')
-                  .update({ active_question_id: null, show_results: false, current_slide: slideNum })
-                  .eq('id', String(session.id));
-                for (const qId of slideQuestionIds) {
-                  await sb.from('questions').delete().eq('id', qId);
-                }
-              } catch {}
-            }
-
             res.statusCode = 200;
             res.end('RESET|0|0|0|0');
+
+            if (sb) {
+              void (async () => {
+                try {
+                  await sb
+                    .from('sessions')
+                    .update({
+                      active_question_id: null,
+                      show_results: false,
+                      current_slide: slideNum,
+                    })
+                    .eq('id', String(session.id));
+                  for (const qId of slideQuestionIds) {
+                    await sb.from('questions').delete().eq('id', qId);
+                  }
+                  for (const q of db.questions) {
+                    await sb
+                      .from('questions')
+                      .update({ slide_number: Number(q.slide_number), is_open: false })
+                      .eq('id', String(q.id));
+                  }
+                } catch {}
+              })();
+            }
             return;
           }
 
           if (op === 'click') {
             if (!isOpen) {
-              // 1er clic : OUVRIR LE VOTE SUR CE SLIDE
+              // 1er clic : OUVRIR LE VOTE SUR CE SLIDE (et remplacer tout ancien vote sur ce même slide)
+              const oldSameSlideIds = (db.questions || [])
+                .filter((q) => Number(q.slide_number) === slideNum)
+                .map((q) => String(q.id));
+              if (oldSameSlideIds.length > 0) {
+                const oldSet = new Set(oldSameSlideIds);
+                db.questions = (db.questions || []).filter((q) => !oldSet.has(String(q.id)));
+                db.votes = (db.votes || []).filter((v) => !oldSet.has(String(v.question_id)));
+              }
               for (const q of db.questions || []) {
                 q.is_open = false;
               }
@@ -300,28 +290,13 @@ function localVoteApiPlugin(): Plugin {
                 rawTitle.length > 0
                   ? rawTitle
                   : `Proposition soumise au vote — Diapositive n°${slideNum}`;
-              let slideDataUrl: string | null = null;
-              try {
-                const slideFile = path.resolve(
-                  process.cwd(),
-                  'public',
-                  'slides',
-                  `slide-${slideNum}.png`
-                );
-                if (fs.existsSync(slideFile)) {
-                  const buf = fs.readFileSync(slideFile);
-                  if (buf.length > 0 && buf.length < 1500000) {
-                    slideDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
-                  }
-                }
-              } catch {}
               const newQ: Record<string, unknown> = {
                 id: newId,
                 session_id: String(session.id),
                 title: qTitle,
                 type: 'mcq',
                 options: ['OUI', 'NON', 'ABSTENTION'],
-                correct_option: slideDataUrl,
+                correct_option: null,
                 slide_number: slideNum,
                 is_open: true,
                 order_index: (db.questions || []).length + 1,
@@ -333,67 +308,92 @@ function localVoteApiPlugin(): Plugin {
               session.show_results = false;
               saveServerDb(db);
 
-              if (sb) {
-                try {
-                  await Promise.all([
-                    sb
-                      .from('questions')
-                      .update({ is_open: false })
-                      .eq('session_id', String(session.id)),
-                    sb.from('questions').insert(newQ),
-                  ]);
-                  await sb
-                    .from('sessions')
-                    .update({
-                      active_question_id: newId,
-                      show_results: false,
-                      current_slide: slideNum,
-                    })
-                    .eq('id', String(session.id));
-                } catch {}
-              }
-
               res.statusCode = 200;
               res.end('OPENED|0|0|0|0');
+
+              if (sb) {
+                void (async () => {
+                  try {
+                    for (const oldId of oldSameSlideIds) {
+                      await sb.from('questions').delete().eq('id', oldId);
+                    }
+                    await sb
+                      .from('questions')
+                      .update({ is_open: false })
+                      .eq('session_id', String(session.id));
+                    await sb.from('questions').insert(newQ);
+                    await sb
+                      .from('sessions')
+                      .update({
+                        active_question_id: newId,
+                        show_results: false,
+                        current_slide: slideNum,
+                      })
+                      .eq('id', String(session.id));
+                  } catch {}
+                })();
+              }
               return;
             } else if (activeQ) {
-              // 2e clic : CLÔTURER LE VOTE & RENVOYER LES RÉSULTATS POUR INSÉRER LA DIAPO
+              // 2e clic : CLÔTURER LE VOTE & RENVOYER LES RÉSULTATS EN < 450ms
               if (sb) {
                 try {
-                  const { data: sbVotes } = await sb
-                    .from('votes')
-                    .select('*')
-                    .eq('question_id', String(activeQ.id));
+                  const sbVotes = await Promise.race([
+                    sb
+                      .from('votes')
+                      .select('*')
+                      .eq('question_id', String(activeQ.id))
+                      .then((r) => r.data),
+                    new Promise<null>((resolve) => setTimeout(() => resolve(null), 400)),
+                  ]);
                   if (Array.isArray(sbVotes)) {
                     const otherVotes = (db.votes || []).filter(
                       (v) => String(v.question_id) !== String(activeQ.id)
                     );
                     db.votes = [...otherVotes, ...(sbVotes as Array<Record<string, unknown>>)];
                   }
-                  await sb.from('questions').update({ is_open: false }).eq('id', String(activeQ.id));
-                  await sb
-                    .from('sessions')
-                    .update({ active_question_id: null, show_results: true })
-                    .eq('id', String(session.id));
                 } catch {}
               }
 
               activeQ.is_open = false;
+              for (const q of db.questions || []) {
+                if (String(q.id) !== String(activeQ.id) && Number(q.slide_number) > slideNum) {
+                  q.slide_number = Number(q.slide_number) + 1;
+                }
+              }
               session.active_question_id = null;
               session.show_results = true;
               const st = getStatsForQuestion(String(activeQ.id));
               const qTitle = String(activeQ.title || `Diapositive ${slideNum}`).replace(/\|/g, '-');
               const sCode = String(session.code || '38NKMQ');
               saveServerDb(db);
-              setTimeout(() => {
-                void syncSlidePreviewToSupabase(slideNum);
-                void syncSlidePreviewToSupabase(slideNum + 1);
-              }, 800);
 
               res.statusCode = 200;
               res.end(
                 `CLOSED_INSERT|${st.total}|${st.ouiCount}|${st.ouiPct}|${st.nonCount}|${st.nonPct}|${st.abstCount}|${st.abstPct}|${sCode}|${qTitle}`
               );
+
+              if (sb) {
+                const closedQId = String(activeQ.id);
+                const shiftedQuestions = (db.questions || []).filter(
+                  (q) => String(q.id) !== closedQId
+                );
+                void (async () => {
+                  try {
+                    await sb.from('questions').update({ is_open: false }).eq('id', closedQId);
+                    await sb
+                      .from('sessions')
+                      .update({ active_question_id: null, show_results: true })
+                      .eq('id', String(session.id));
+                    for (const q of shiftedQuestions) {
+                      await sb
+                        .from('questions')
+                        .update({ slide_number: Number(q.slide_number) })
+                        .eq('id', String(q.id));
+                    }
+                  } catch {}
+                })();
+              }
               return;
             }
           }
