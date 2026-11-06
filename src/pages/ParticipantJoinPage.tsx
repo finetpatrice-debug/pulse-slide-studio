@@ -15,6 +15,8 @@ import {
   Send,
   Maximize2,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { pollService } from '../services/pollService';
 import type { Session, Question, Participant } from '../types/poll';
@@ -48,6 +50,7 @@ export default function ParticipantJoinPage() {
   // Aperçu de l'image de la diapositive PowerPoint en haut du GSM
   const [slideImgFailed, setSlideImgFailed] = useState(false);
   const [isSlideZoomed, setIsSlideZoomed] = useState(false);
+  const [manualSlideNumber, setManualSlideNumber] = useState<number | null>(null);
 
   // 1. Chargement initial de la séance
   useEffect(() => {
@@ -126,7 +129,32 @@ export default function ParticipantJoinPage() {
     return questions.find((q) => q.id === session.active_question_id) ?? null;
   }, [session?.active_question_id, questions]);
 
-  const activeSlideNumber = activeQuestion?.slide_number || session?.current_slide || 1;
+  const liveSlideNumber =
+    (activeQuestion?.is_open ? activeQuestion.slide_number : null) ||
+    session?.current_slide ||
+    1;
+
+  // Quand PowerPoint change de diapositive ou qu'un vote s'ouvre, suivre automatiquement le direct
+  useEffect(() => {
+    setManualSlideNumber(null);
+  }, [liveSlideNumber, activeQuestion?.id, activeQuestion?.is_open]);
+
+  const activeSlideNumber = manualSlideNumber ?? liveSlideNumber;
+
+  const handlePrevViewedSlide = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setManualSlideNumber(Math.max(1, activeSlideNumber - 1));
+  };
+
+  const handleNextViewedSlide = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setManualSlideNumber(activeSlideNumber + 1);
+  };
+
+  const handleReturnToLiveSlide = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setManualSlideNumber(null);
+  };
 
   // Réinitialiser l'état d'erreur d'image quand on change de slide
   useEffect(() => {
@@ -358,9 +386,11 @@ export default function ParticipantJoinPage() {
       : ['OUI', 'NON', 'ABSTENTION'];
 
   const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
-  const slideImageUrl = activeQuestion?.correct_option?.startsWith('data:image/')
-    ? activeQuestion.correct_option
-    : `${baseUrl}slides/slide-${activeSlideNumber}.png`;
+  const slideImageUrl =
+    activeQuestion?.correct_option?.startsWith('data:image/') &&
+    activeSlideNumber === (activeQuestion.slide_number || liveSlideNumber)
+      ? activeQuestion.correct_option
+      : `${baseUrl}slides/slide-${activeSlideNumber}.png`;
 
   // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
   return (
@@ -371,10 +401,41 @@ export default function ParticipantJoinPage() {
           className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-3"
           onClick={() => setIsSlideZoomed(false)}
         >
-          <div className="w-full max-w-3xl flex items-center justify-between mb-3 px-1">
-            <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-              Diapositive {activeSlideNumber} — Aperçu complet
-            </span>
+          <div
+            className="w-full max-w-3xl flex items-center justify-between mb-3 px-1 gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handlePrevViewedSlide}
+                disabled={activeSlideNumber <= 1}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1 border border-white/15"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Préc.
+              </button>
+              <span className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                Dia {activeSlideNumber}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextViewedSlide}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1 border border-white/15"
+              >
+                Suiv.
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {activeSlideNumber !== liveSlideNumber && (
+                <button
+                  type="button"
+                  onClick={handleReturnToLiveSlide}
+                  className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold"
+                >
+                  Direct ({liveSlideNumber})
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setIsSlideZoomed(false)}
@@ -390,7 +451,7 @@ export default function ParticipantJoinPage() {
             className="w-full max-w-3xl rounded-2xl border border-white/20 shadow-2xl bg-white object-contain"
           />
           <p className="text-xs text-slate-400 mt-3">
-            Touchez l'écran pour revenir aux boutons de vote
+            Utilisez ◀ Préc. / Suiv. ▶ pour parcourir les diapositives ou touchez l'écran pour revenir au vote
           </p>
         </div>
       )}
@@ -405,11 +466,28 @@ export default function ParticipantJoinPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handlePrevViewedSlide}
+            disabled={activeSlideNumber <= 1}
+            title="Diapositive précédente"
+            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-white/10 text-slate-200 transition"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
           <div className="px-2.5 py-1 rounded-xl bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Slide {activeSlideNumber}</span>
+            <span>Dia {activeSlideNumber}</span>
           </div>
+          <button
+            type="button"
+            onClick={handleNextViewedSlide}
+            title="Diapositive suivante"
+            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 transition"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
           <button
             onClick={handleLeaveParticipant}
             title="Changer de participant"
@@ -431,6 +509,38 @@ export default function ParticipantJoinPage() {
                   Vote définitif validé : {selectedAnswer}
                 </span>
               </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handlePrevViewedSlide}
+                disabled={activeSlideNumber <= 1}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Dia préc.
+              </button>
+              <span className="text-xs font-bold text-indigo-300">
+                Diapositive {activeSlideNumber}
+                {activeSlideNumber !== liveSlideNumber ? ` (Direct : ${liveSlideNumber})` : ''}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextViewedSlide}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-1"
+              >
+                Dia suiv.
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {activeSlideNumber !== liveSlideNumber && (
+              <button
+                type="button"
+                onClick={handleReturnToLiveSlide}
+                className="w-full py-1.5 rounded-xl bg-emerald-600/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold"
+              >
+                Revenir à la diapositive en direct (Dia {liveSlideNumber})
+              </button>
             )}
             {!slideImgFailed && (
               <div
@@ -470,12 +580,40 @@ export default function ParticipantJoinPage() {
           <div className="space-y-4">
             {/* 1. EN HAUT : VISUEL DE LA DIAPOSITIVE POWERPOINT SUR LAQUELLE ON VOTE */}
             <div className="bg-slate-900 border border-white/15 rounded-3xl p-3.5 shadow-xl space-y-2.5">
-              <div className="flex items-center justify-between gap-2 px-1">
-                <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Slide {activeSlideNumber}
-                </span>
+              <div className="flex items-center justify-between gap-1.5 px-1 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handlePrevViewedSlide}
+                    disabled={activeSlideNumber <= 1}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-0.5"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Préc.
+                  </button>
+                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    Dia {activeSlideNumber}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextViewedSlide}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/10 inline-flex items-center gap-0.5"
+                  >
+                    Suiv.
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-2">
+                  {activeSlideNumber !== liveSlideNumber && (
+                    <button
+                      type="button"
+                      onClick={handleReturnToLiveSlide}
+                      className="text-xs font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30"
+                    >
+                      Direct ({liveSlideNumber})
+                    </button>
+                  )}
                   {!slideImgFailed && (
                     <button
                       type="button"

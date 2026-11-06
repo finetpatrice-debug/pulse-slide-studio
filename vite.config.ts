@@ -185,6 +185,12 @@ function localVoteApiPlugin(): Plugin {
             if (session.current_slide !== slideNum) {
               session.current_slide = slideNum;
               saveServerDb(db);
+              if (sb) {
+                void sb
+                  .from('sessions')
+                  .update({ current_slide: slideNum })
+                  .eq('id', String(session.id));
+              }
             }
             if (pendingPptCommand) {
               const cmdToRun = pendingPptCommand;
@@ -336,12 +342,13 @@ function localVoteApiPlugin(): Plugin {
                   await sb.from('questions').update({ is_open: false }).eq('id', String(activeQ.id));
                   await sb
                     .from('sessions')
-                    .update({ show_results: true })
+                    .update({ active_question_id: null, show_results: true })
                     .eq('id', String(session.id));
                 } catch {}
               }
 
               activeQ.is_open = false;
+              session.active_question_id = null;
               session.show_results = true;
               const st = getStatsForQuestion(String(activeQ.id));
               const qTitle = String(activeQ.title || `Diapositive ${slideNum}`).replace(/\|/g, '-');
