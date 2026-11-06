@@ -19,7 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { pollService } from '../services/pollService';
-import type { Session, Question, Participant } from '../types/poll';
+import type { Session, Question, Participant, Vote } from '../types/poll';
 
 function getParticipantStorageKey(sessionId: string): string {
   return `pulseslide_participant_${sessionId}`;
@@ -37,6 +37,7 @@ export default function ParticipantJoinPage() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [sessionVotes, setSessionVotes] = useState<Vote[]>([]);
   const [participant, setParticipant] = useState<Participant | null>(null);
 
   // État du vote pour la diapositive active :
@@ -78,8 +79,14 @@ export default function ParticipantJoinPage() {
 
         setSession(foundSession);
 
-        const sessionQuestions = await pollService.getQuestionsBySession(foundSession.id);
-        if (!cancelled) setQuestions(sessionQuestions);
+        const [sessionQuestions, initialVotes] = await Promise.all([
+          pollService.getQuestionsBySession(foundSession.id),
+          pollService.getVotesBySession(foundSession.id),
+        ]);
+        if (!cancelled) {
+          setQuestions(sessionQuestions);
+          setSessionVotes(initialVotes);
+        }
 
         const savedParticipantId = localStorage.getItem(
           getParticipantStorageKey(foundSession.id)
@@ -119,6 +126,7 @@ export default function ParticipantJoinPage() {
     const unsubscribe = pollService.subscribeToSessionRealtime(session.id, {
       onSessionUpdate: (updatedSession) => setSession(updatedSession),
       onQuestionsChange: (updatedQuestions) => setQuestions(updatedQuestions),
+      onVotesChange: (updatedVotes) => setSessionVotes(updatedVotes),
     });
 
     return () => unsubscribe();
@@ -141,6 +149,49 @@ export default function ParticipantJoinPage() {
 
   const activeSlideNumber = manualSlideNumber ?? liveSlideNumber;
 
+  // Question associée à la diapositive affichée (ex: Dia 9 de vote ou Dia 10 de résultat)
+  const slideQuestion = useMemo(() => {
+    const reversed = [...questions].reverse();
+    const exactMatch = reversed.find((q) => q.slide_number === activeSlideNumber);
+    if (exactMatch) return exactMatch;
+    const resultSlideMatch = reversed.find(
+      (q) => !q.is_open && q.slide_number + 1 === activeSlideNumber
+    );
+    return resultSlideMatch ?? null;
+  }, [questions, activeSlideNumber]);
+
+  const slideVoteStats = useMemo(() => {
+    if (!slideQuestion) return null;
+    const qVotes = sessionVotes.filter((v) => v.question_id === slideQuestion.id);
+    const total = qVotes.length;
+    let ouiCount = 0;
+    let nonCount = 0;
+    let abstCount = 0;
+    for (const v of qVotes) {
+      const ans = String(v.answer || '').trim().toUpperCase();
+      if (ans === 'OUI' || ans === 'POUR') ouiCount++;
+      else if (ans === 'NON' || ans === 'CONTRE') nonCount++;
+      else abstCount++;
+    }
+    const ouiPct = total > 0 ? Math.round((ouiCount / total) * 100) : 0;
+    const nonPct = total > 0 ? Math.round((nonCount / total) * 100) : 0;
+    const abstPct = total > 0 ? Math.round((abstCount / total) * 100) : 0;
+    const myVote = participant
+      ? qVotes.find((v) => v.participant_id === participant.id)?.answer || null
+      : null;
+    return {
+      question: slideQuestion,
+      total,
+      ouiCount,
+      nonCount,
+      abstCount,
+      ouiPct,
+      nonPct,
+      abstPct,
+      myVote,
+    };
+  }, [slideQuestion, sessionVotes, participant]);
+
   const handlePrevViewedSlide = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setManualSlideNumber(Math.max(1, activeSlideNumber - 1));
@@ -159,14 +210,15 @@ export default function ParticipantJoinPage() {
   // Réinitialiser l'état d'erreur d'image quand on change de slide
   useEffect(() => {
     setSlideImgFailed(false);
-  }, [activeSlideNumber, activeQuestion?.id, activeQuestion?.correct_option]);
+  }, [activeSlideNumber, activeQuestion?.id, activeQuestion?.correct_option, slideQuestion?.id]);
 
   // 3. Charger le vote existant du participant lorsque le texte soumis au vote change
   useEffect(() => {
     let cancelled = false;
 
     async function loadExistingVote() {
-      if (!activeQuestion || !participant) {
+      const targetQ = activeQuestion || slideQuestion;
+      if (!targetQ || !participant) {
         setDraftChoice('');
         setSelectedAnswer('');
         setVoteConfirmed(false);
@@ -174,7 +226,7 @@ export default function ParticipantJoinPage() {
       }
 
       const existingVote = await pollService.getParticipantVoteForQuestion(
-        activeQuestion.id,
+        targetQ.id,
         participant.id
       );
       if (cancelled) return;
@@ -194,7 +246,7 @@ export default function ParticipantJoinPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeQuestion?.id, participant?.id]);
+  }, [activeQuestion?.id, slideQuestion?.id, participant?.id]);
 
   // Inscription rapide
   const handleJoinSubmit = async (e: React.FormEvent) => {
@@ -221,8 +273,12 @@ export default function ParticipantJoinPage() {
           throw new Error(`Séance "${targetCode}" introuvable.`);
         }
         setSession(currentSession);
-        const qList = await pollService.getQuestionsBySession(currentSession.id);
+        const [qList, vList] = await Promise.all([
+          pollService.getQuestionsBySession(currentSession.id),
+          pollService.getVotesBySession(currentSession.id),
+        ]);
         setQuestions(qList);
+        setSessionVotes(vList);
       }
 
       const savedId = localStorage.getItem(getParticipantStorageKey(currentSession.id));
@@ -277,6 +333,12 @@ export default function ParticipantJoinPage() {
       });
       setSelectedAnswer(savedVote.answer);
       setVoteConfirmed(true);
+      setSessionVotes((prev) => [
+        ...prev.filter(
+          (v) => !(v.question_id === activeQuestion.id && v.participant_id === participant.id)
+        ),
+        savedVote,
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de l'envoi du vote.");
     } finally {
@@ -386,11 +448,16 @@ export default function ParticipantJoinPage() {
       : ['OUI', 'NON', 'ABSTENTION'];
 
   const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
+  const liveOrSlideQuestion =
+    activeQuestion && activeSlideNumber === activeQuestion.slide_number
+      ? activeQuestion
+      : slideQuestion && activeSlideNumber === slideQuestion.slide_number
+      ? slideQuestion
+      : null;
   const slideImageUrl =
-    activeQuestion?.correct_option?.startsWith('data:image/') &&
-    activeSlideNumber === (activeQuestion.slide_number || liveSlideNumber)
-      ? activeQuestion.correct_option
-      : `${baseUrl}slides/slide-${activeSlideNumber}.png`;
+    liveOrSlideQuestion?.correct_option?.startsWith('data:image/')
+      ? liveOrSlideQuestion.correct_option
+      : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106c`;
 
   // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
   return (
@@ -501,15 +568,15 @@ export default function ParticipantJoinPage() {
       <main className="flex-1 flex flex-col justify-start p-4 sm:p-5 max-w-md w-full mx-auto">
         {!activeQuestion || !activeQuestion.is_open || voteConfirmed ? (
           /* ÉCRAN D'ATTENTE DU VOTE SUIVANT (affiché avant l'ouverture ET dès que le vote définitif est validé) */
-          <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 text-center shadow-2xl my-auto space-y-4">
-            {voteConfirmed && selectedAnswer && (
-              <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2.5 shadow-md">
+          <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-5 text-center shadow-2xl my-auto space-y-4">
+            {(voteConfirmed && selectedAnswer) || slideVoteStats?.myVote ? (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center gap-2.5 shadow-md">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                 <span className="text-sm font-extrabold text-emerald-100">
-                  Vote définitif validé : {selectedAnswer}
+                  Vote définitif validé : {slideVoteStats?.myVote || selectedAnswer}
                 </span>
               </div>
-            )}
+            ) : null}
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -555,25 +622,138 @@ export default function ParticipantJoinPage() {
                 />
               </div>
             )}
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
-              <Radio className="w-6 h-6 text-emerald-400 animate-pulse" />
-            </div>
-            <h2 className="text-lg font-bold text-white">
-              {voteConfirmed ? 'En attente du vote suivant...' : 'Vous êtes prêt à voter'}
-            </h2>
-            <p className="text-slate-300 text-sm leading-relaxed">
-              {voteConfirmed ? (
-                <>
-                  Votre vote a bien été enregistré. Dès que l'orateur lancera le{' '}
-                  <strong>prochain vote</strong>, les boutons s'afficheront ici automatiquement.
-                </>
-              ) : (
-                <>
-                  Dès que l'orateur ouvre le vote sur une diapositive, les boutons{' '}
-                  <strong>OUI / NON / ABSTENTION</strong> s'afficheront ici automatiquement.
-                </>
-              )}
-            </p>
+
+            {/* RÉSULTAT DU VOTE POUR CETTE DIAPOSITIVE (OU SA DIAPO DE RÉSULTAT) */}
+            {slideVoteStats && (
+              <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-4 text-left space-y-3 shadow-lg">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
+                    Résultat du vote — Dia {slideVoteStats.question.slide_number}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {slideVoteStats.total} vote(s)
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-white leading-snug">
+                  {slideVoteStats.question.title}
+                </p>
+
+                {/* Bandeau Verdict */}
+                <div
+                  className={`py-2 px-3 rounded-xl text-center text-xs font-black uppercase tracking-wide text-white ${
+                    slideVoteStats.ouiCount > slideVoteStats.nonCount
+                      ? 'bg-emerald-600'
+                      : slideVoteStats.nonCount > slideVoteStats.ouiCount
+                      ? 'bg-rose-600'
+                      : 'bg-amber-600'
+                  }`}
+                >
+                  {slideVoteStats.ouiCount > slideVoteStats.nonCount
+                    ? `Proposition adoptée (OUI : ${slideVoteStats.ouiPct} %)`
+                    : slideVoteStats.nonCount > slideVoteStats.ouiCount
+                    ? `Proposition rejetée (NON : ${slideVoteStats.nonPct} %)`
+                    : `Égalité des voix (OUI : ${slideVoteStats.ouiPct} % | NON : ${slideVoteStats.nonPct} %)`}
+                </div>
+
+                {/* Barres OUI / NON / ABSTENTION */}
+                <div className="space-y-2 pt-1">
+                  {[
+                    {
+                      label: 'OUI',
+                      count: slideVoteStats.ouiCount,
+                      pct: slideVoteStats.ouiPct,
+                      barClass: 'bg-emerald-500',
+                      badgeClass: 'bg-emerald-600 text-white',
+                    },
+                    {
+                      label: 'NON',
+                      count: slideVoteStats.nonCount,
+                      pct: slideVoteStats.nonPct,
+                      barClass: 'bg-rose-500',
+                      badgeClass: 'bg-rose-600 text-white',
+                    },
+                    {
+                      label: 'ABSTENTION',
+                      count: slideVoteStats.abstCount,
+                      pct: slideVoteStats.abstPct,
+                      barClass: 'bg-sky-500',
+                      badgeClass: 'bg-sky-600 text-white',
+                    },
+                  ].map((row) => (
+                    <div key={row.label} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className={`px-2 py-0.5 rounded-md ${row.badgeClass}`}>
+                          {row.label}
+                        </span>
+                        <span className="text-slate-200">
+                          {row.count} voix ({row.pct} %)
+                        </span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${row.barClass} transition-all duration-300`}
+                          style={{ width: `${Math.max(row.pct, 4)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Accès rapide aux diapositives votées */}
+            {questions.length > 0 && (
+              <div className="pt-1 text-left space-y-1.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
+                  Votes réalisés ({questions.length}) :
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {questions.map((q) => {
+                    const isViewingThis =
+                      activeSlideNumber === q.slide_number ||
+                      (!q.is_open && activeSlideNumber === q.slide_number + 1);
+                    return (
+                      <button
+                        key={q.id}
+                        type="button"
+                        onClick={() => setManualSlideNumber(q.slide_number)}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                          isViewingThis
+                            ? 'bg-indigo-600 border-indigo-400 text-white'
+                            : 'bg-slate-800/90 hover:bg-slate-700 border-white/10 text-slate-200'
+                        }`}
+                      >
+                        Dia {q.slide_number} {q.is_open ? '• En cours' : '• Résultat'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!slideVoteStats && (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">
+                  <Radio className="w-6 h-6 text-emerald-400 animate-pulse" />
+                </div>
+                <h2 className="text-lg font-bold text-white">
+                  {voteConfirmed ? 'En attente du vote suivant...' : 'Vous êtes prêt à voter'}
+                </h2>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  {voteConfirmed ? (
+                    <>
+                      Votre vote a bien été enregistré. Dès que l'orateur lancera le{' '}
+                      <strong>prochain vote</strong>, les boutons s'afficheront ici automatiquement.
+                    </>
+                  ) : (
+                    <>
+                      Dès que l'orateur ouvre le vote sur une diapositive, les boutons{' '}
+                      <strong>OUI / NON / ABSTENTION</strong> s'afficheront ici automatiquement.
+                    </>
+                  )}
+                </p>
+              </>
+            )}
           </div>
         ) : (
           /* ÉCRAN DE VOTE : SLIDE EN HAUT + OUI / NON / ABSTENTION + BOUTON VALIDER EN BAS */

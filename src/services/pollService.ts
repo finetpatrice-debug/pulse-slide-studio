@@ -855,6 +855,10 @@ export const pollService = {
                 const q = await this.getQuestionsBySession(sessionId);
                 callbacks.onQuestionsChange(q);
               }
+              if (callbacks.onVotesChange) {
+                const v = await this.getVotesBySession(sessionId);
+                callbacks.onVotesChange(v);
+              }
             } catch {
               // Ignorer erreurs réseau temporaires sur GSM
             }
