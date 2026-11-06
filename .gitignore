@@ -7,5 +7,3 @@ addin/*.bak*
 
 .electron-data/
 .electron-data-ui/
-
-public/slides/

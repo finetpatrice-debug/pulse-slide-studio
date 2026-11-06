@@ -881,9 +881,13 @@ export const pollService = {
       const p = participantMap.get(vote.participant_id);
 
       let correctness = 'Sondage (sans bonne réponse)';
-      if (q?.correct_option) {
+      const validCorrectOption =
+        q?.correct_option && !q.correct_option.startsWith('data:image/')
+          ? q.correct_option
+          : null;
+      if (validCorrectOption) {
         const isCorrect =
-          vote.answer.trim().toLowerCase() === q.correct_option.trim().toLowerCase();
+          vote.answer.trim().toLowerCase() === validCorrectOption.trim().toLowerCase();
         correctness = isCorrect ? 'Bonne réponse' : 'Mauvaise réponse';
       }
 
@@ -898,7 +902,7 @@ export const pollService = {
           q?.slide_number ?? '-',
           p?.nickname ?? 'Anonyme',
           vote.answer,
-          q?.correct_option ?? '-',
+          validCorrectOption ?? '-',
           correctness,
           formattedDate,
         ]
@@ -910,6 +914,10 @@ export const pollService = {
     // Si aucun vote n'a encore été enregistré, on exporte au moins la liste des questions préparées
     if (votes.length === 0) {
       for (const q of questions) {
+        const validCorrectOption =
+          q.correct_option && !q.correct_option.startsWith('data:image/')
+            ? q.correct_option
+            : null;
         rows.push(
           [
             session.title,
@@ -919,7 +927,7 @@ export const pollService = {
             q.slide_number ?? '-',
             '- (Aucun vote)',
             '-',
-            q.correct_option ?? '-',
+            validCorrectOption ?? '-',
             '-',
             '-',
           ]

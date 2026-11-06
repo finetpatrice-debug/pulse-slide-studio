@@ -263,13 +263,28 @@ function localVoteApiPlugin(): Plugin {
                 rawTitle.length > 0
                   ? rawTitle
                   : `Proposition soumise au vote — Diapositive n°${slideNum}`;
+              let slideDataUrl: string | null = null;
+              try {
+                const slideFile = path.resolve(
+                  process.cwd(),
+                  'public',
+                  'slides',
+                  `slide-${slideNum}.png`
+                );
+                if (fs.existsSync(slideFile)) {
+                  const buf = fs.readFileSync(slideFile);
+                  if (buf.length > 0 && buf.length < 1500000) {
+                    slideDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+                  }
+                }
+              } catch {}
               const newQ: Record<string, unknown> = {
                 id: newId,
                 session_id: String(session.id),
                 title: qTitle,
                 type: 'mcq',
                 options: ['OUI', 'NON', 'ABSTENTION'],
-                correct_option: null,
+                correct_option: slideDataUrl,
                 slide_number: slideNum,
                 is_open: true,
                 order_index: (db.questions || []).length + 1,
@@ -283,21 +298,20 @@ function localVoteApiPlugin(): Plugin {
 
               if (sb) {
                 try {
-                  await sb.from('sessions').upsert({
-                    id: String(session.id),
-                    code: String(session.code || '38NKMQ'),
-                    title: String(session.title || 'Séance de Vote PowerPoint'),
-                    current_slide: slideNum,
-                    active_question_id: null,
-                    show_results: false,
-                    reveal_answer: false,
-                    is_active: true,
-                  });
-                  await sb.from('questions').update({ is_open: false }).eq('session_id', String(session.id));
-                  await sb.from('questions').insert(newQ);
+                  await Promise.all([
+                    sb
+                      .from('questions')
+                      .update({ is_open: false })
+                      .eq('session_id', String(session.id)),
+                    sb.from('questions').insert(newQ),
+                  ]);
                   await sb
                     .from('sessions')
-                    .update({ active_question_id: newId, show_results: false, current_slide: slideNum })
+                    .update({
+                      active_question_id: newId,
+                      show_results: false,
+                      current_slide: slideNum,
+                    })
                     .eq('id', String(session.id));
                 } catch {}
               }

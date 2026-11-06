@@ -131,7 +131,7 @@ export default function ParticipantJoinPage() {
   // Réinitialiser l'état d'erreur d'image quand on change de slide
   useEffect(() => {
     setSlideImgFailed(false);
-  }, [activeSlideNumber, activeQuestion?.id]);
+  }, [activeSlideNumber, activeQuestion?.id, activeQuestion?.correct_option]);
 
   // 3. Charger le vote existant du participant lorsque le texte soumis au vote change
   useEffect(() => {
@@ -357,7 +357,10 @@ export default function ParticipantJoinPage() {
       ? activeQuestion.options
       : ['OUI', 'NON', 'ABSTENTION'];
 
-  const slideImageUrl = `/slides/slide-${activeSlideNumber}.png`;
+  const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
+  const slideImageUrl = activeQuestion?.correct_option?.startsWith('data:image/')
+    ? activeQuestion.correct_option
+    : `${baseUrl}slides/slide-${activeSlideNumber}.png`;
 
   // ÉCRAN 2 : CONNECTÉ — ATTENTE OU VOTE OUI / NON / ABSTENTION
   return (
