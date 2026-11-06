@@ -1,0 +1,9 @@
+{
+  "name": "Vote en Direct — Lifras",
+  "short_name": "Vote en Direct",
+  "start_url": "./join/38NKMQ",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#020617"
+}
