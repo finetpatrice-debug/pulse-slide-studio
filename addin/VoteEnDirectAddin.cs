@@ -1382,6 +1382,13 @@ namespace VoteEnDirect
                   screentip=""Intégrer le QR Code et le bouton de vote directement dans cette diapositive""
                   supertip=""Ajoute le QR Code de la séance et le bouton LANCER LE VOTE directement dans la diapositive affichée.""
                   onAction=""OnClickQrCode"" />
+          <button id=""BtnListVotants""
+                  label=""Codes Votants (4 chiffres)""
+                  size=""large""
+                  imageMso=""FindDialog""
+                  screentip=""Voir la liste des participants connectés et leurs codes personnels à 4 chiffres""
+                  supertip=""Affiche tous les participants inscrits et leur code à 4 chiffres (#XXXX) en cas d'oubli.""
+                  onAction=""OnClickListVotants"" />
           <button id=""BtnClearVotants""
                   label=""Vider la Base des Votants""
                   size=""large""
@@ -1531,6 +1538,28 @@ namespace VoteEnDirect
                 }
             }
             catch { }
+        }
+
+        public void OnClickListVotants(object control)
+        {
+            try
+            {
+                EnsureViteServerRunning();
+                string resp = CallLocalApi("/api/ppt-action?op=list_participants");
+                Log("OnClickListVotants -> " + resp);
+                if (string.IsNullOrEmpty(resp) || resp == "EMPTY")
+                {
+                    MessageBox.Show("Aucun participant n'est actuellement inscrit dans la séance.", "Vote en Direct — Codes Votants (4 chiffres)", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Liste des participants inscrits et leur code personnel à 4 chiffres :\r\n\r\n" + resp, "Vote en Direct — Codes Votants (4 chiffres)", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Vote en Direct");
+            }
         }
 
         public void OnClickClearVotants(object control)

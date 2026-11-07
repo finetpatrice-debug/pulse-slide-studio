@@ -258,6 +258,44 @@ function localVoteApiPlugin(): Plugin {
             return;
           }
 
+          if (op === 'list_participants') {
+            void (async () => {
+              let list: Array<{ nickname?: string }> = (db.participants || []).filter(
+                (p) => String(p.session_id) === String(session.id)
+              );
+              if (sb) {
+                try {
+                  const { data } = await sb
+                    .from('participants')
+                    .select('id, nickname, created_at')
+                    .eq('session_id', String(session.id))
+                    .order('created_at', { ascending: true });
+                  if (data && data.length > 0) {
+                    list = data;
+                  }
+                } catch {}
+              }
+              if (list.length === 0) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.end('EMPTY');
+                return;
+              }
+              const lines = list.map((p, idx) => {
+                const raw = String(p.nickname || '').trim();
+                const m = raw.match(/^(.*?)\s*#(\d{4})\s*$/);
+                if (m) {
+                  return `${idx + 1}. ${m[1].trim()}   —   Code : #${m[2]}`;
+                }
+                return `${idx + 1}. ${raw}`;
+              });
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+              res.end(lines.join('\n'));
+            })();
+            return;
+          }
+
           if (op === 'reset') {
             const slideQuestionIds = new Set(
               (db.questions || [])

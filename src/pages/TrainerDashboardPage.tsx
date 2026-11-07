@@ -1262,6 +1262,45 @@ export default function TrainerDashboardPage() {
               </div>
             </div>
 
+            {/* Liste des participants connectés et de leurs codes personnels à 4 chiffres */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-indigo-500/30 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  Participants connectés &amp; Codes à 4 chiffres ({participants.length})
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  En cas d'oubli du code sur GSM, lisez-lui son numéro #XXXX ci-dessous
+                </span>
+              </div>
+
+              {participants.length === 0 ? (
+                <p className="text-xs text-slate-400 py-2 text-center">
+                  Aucun participant inscrit pour le moment.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+                  {participants.map((p) => {
+                    const baseName = pollService.extractParticipantBaseName(p.nickname);
+                    const pin = pollService.extractParticipantPin(p);
+                    return (
+                      <div
+                        key={p.id}
+                        className="px-3 py-2 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-between gap-2"
+                      >
+                        <span className="text-xs font-bold text-white truncate">
+                          {baseName}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono text-xs font-black shrink-0">
+                          #{pin}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {questions.length === 0 ? (
               <p className="text-xs text-slate-400 py-8 text-center">
                 Aucun texte voté pour le moment.
