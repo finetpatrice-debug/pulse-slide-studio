@@ -498,6 +498,20 @@ export default function TrainerDashboardPage() {
     setQuestions(refreshed);
   };
 
+  const handleClearParticipants = async () => {
+    if (!session) return;
+    const confirmed = window.confirm(
+      `Voulez-vous remettre à zéro la liste des votants connectés (${participants.length}) et leurs codes à 4 chiffres ?`
+    );
+    if (!confirmed) return;
+    await pollService.clearSessionParticipants(session.id);
+    try {
+      await fetch('/api/ppt-action?op=clear_participants');
+    } catch {}
+    setParticipants([]);
+    setVotes([]);
+  };
+
   const handleCopyLink = async () => {
     if (!joinUrl) return;
     await navigator.clipboard.writeText(joinUrl);
@@ -620,6 +634,14 @@ export default function TrainerDashboardPage() {
               className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white"
             >
               Intégrer dans Slide
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleClearParticipants()}
+              title="Remettre à zéro la base des votants connectés"
+              className="px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-600 text-[10px] font-bold text-white"
+            >
+              RAZ Votants ({participants.length})
             </button>
             <button
               type="button"
@@ -768,6 +790,17 @@ export default function TrainerDashboardPage() {
             </span>
           </button>
 
+          {/* 1bis. Bouton Administrateur : Remettre à zéro la base des votants */}
+          <button
+            type="button"
+            onClick={() => void handleClearParticipants()}
+            title="Vider la liste des personnes connectées et leurs codes à 4 chiffres"
+            className="py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 border bg-rose-600/20 hover:bg-rose-600/35 text-rose-200 border-rose-500/40 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>RAZ Votants ({participants.length})</span>
+          </button>
+
           {/* 2. Bouton Lancer le Vote sur ce Slide */}
           <button
             type="button"
@@ -889,14 +922,19 @@ export default function TrainerDashboardPage() {
 
               {/* Liste en direct des participants connectés */}
               <div className="p-4 rounded-2xl bg-slate-950/80 border border-white/10">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2 gap-2">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Users className="w-4 h-4 text-emerald-400" />
-                    Participants présents
+                    Participants présents ({participants.length})
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300">
-                    {participants.length} connecté{participants.length > 1 ? 's' : ''}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearParticipants()}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 flex items-center gap-1 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remettre à zéro les votants
+                  </button>
                 </div>
 
                 {participants.length === 0 ? (
@@ -1197,21 +1235,31 @@ export default function TrainerDashboardPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  pollService.exportSessionResultsToCsv(
-                    session,
-                    questions,
-                    participants,
-                    votes
-                  )
-                }
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-2 shadow-lg transition"
-              >
-                <Download className="w-4 h-4" />
-                Télécharger CSV / Excel
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void handleClearParticipants()}
+                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white flex items-center gap-2 shadow-lg transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Vider la base des votants ({participants.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    pollService.exportSessionResultsToCsv(
+                      session,
+                      questions,
+                      participants,
+                      votes
+                    )
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-2 shadow-lg transition"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger CSV / Excel
+                </button>
+              </div>
             </div>
 
             {questions.length === 0 ? (

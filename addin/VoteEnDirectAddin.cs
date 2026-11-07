@@ -313,9 +313,13 @@ namespace VoteEnDirect
 
                 dynamic labelShape = null;
                 bool alreadyHasQr = false;
+                bool hasIconOui = false;
+                bool hasIconNon = false;
+                bool hasIconAbst = false;
                 dynamic oldLeftQrPic = null;
                 dynamic existingBtn = null;
                 dynamic existingResetBtn = null;
+                dynamic existingClearUsersBtn = null;
 
                 int count = (int)slide.Shapes.Count;
                 for (int i = count; i >= 1; i--)
@@ -354,6 +358,22 @@ namespace VoteEnDirect
                         {
                             existingResetBtn = shape;
                         }
+                        else if (sName.StartsWith("VoteEnDirect_BtnClearUsers"))
+                        {
+                            existingClearUsersBtn = shape;
+                        }
+                        else if (sName == "VoteEnDirect_IconOui")
+                        {
+                            hasIconOui = true;
+                        }
+                        else if (sName == "VoteEnDirect_IconNon")
+                        {
+                            hasIconNon = true;
+                        }
+                        else if (sName == "VoteEnDirect_IconAbst")
+                        {
+                            hasIconAbst = true;
+                        }
                         else if ((int)shape.Type == 13 && (double)shape.Left < (slideW * 0.38) && (double)shape.Top > (slideH * 0.18) && (double)shape.Top < (slideH * 0.75) && (double)shape.Width > 70)
                         {
                             double diff = Math.Abs((double)shape.Width - (double)shape.Height);
@@ -380,7 +400,60 @@ namespace VoteEnDirect
                                 if ((double)shape.Width < 210) shape.Width = 210f;
                                 labelShape = shape;
                             }
+                            else if ((double)shape.Left > (slideW * 0.30) && txt.Contains("A") && txt.Contains("B") && txt.Contains("C") && txt.Trim().Length <= 60)
+                            {
+                                try { shape.TextFrame.AutoSize = 0; } catch { }
+                                try { shape.TextFrame2.AutoSize = 0; } catch { }
+                                shape.TextFrame.TextRange.Text = "";
+                                shape.Top = 161.5f;
+                                shape.Height = 174.5f;
+                                modified = true;
+                            }
                         }
+
+                        if (!sName.StartsWith("VoteEnDirect_") && (int)shape.HasTextFrame == -1 && (double)shape.Left > 340 && (double)shape.Top > 130 && (double)shape.Top < 205 && (double)shape.Width > 400 && (double)shape.Height < 150)
+                        {
+                            try { shape.TextFrame.AutoSize = 0; } catch { }
+                            try { shape.TextFrame2.AutoSize = 0; } catch { }
+                            shape.Top = 161.5f;
+                            shape.Height = 174.5f;
+                            modified = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                string slidesAssetsDir = Path.Combine(_projectRoot, "public", "slides");
+                string iconOuiFile = Path.Combine(slidesAssetsDir, "icon-oui.png");
+                string iconNonFile = Path.Combine(slidesAssetsDir, "icon-non.png");
+                string iconAbstFile = Path.Combine(slidesAssetsDir, "icon-abst.png");
+                if (!hasIconOui && File.Exists(iconOuiFile))
+                {
+                    try
+                    {
+                        dynamic picOui = slide.Shapes.AddPicture(iconOuiFile, 0, -1, 471.2f, 180f, 48f, 48f);
+                        picOui.Name = "VoteEnDirect_IconOui";
+                        modified = true;
+                    }
+                    catch { }
+                }
+                if (!hasIconNon && File.Exists(iconNonFile))
+                {
+                    try
+                    {
+                        dynamic picNon = slide.Shapes.AddPicture(iconNonFile, 0, -1, 625.0f, 180f, 48f, 48f);
+                        picNon.Name = "VoteEnDirect_IconNon";
+                        modified = true;
+                    }
+                    catch { }
+                }
+                if (!hasIconAbst && File.Exists(iconAbstFile))
+                {
+                    try
+                    {
+                        dynamic picAbst = slide.Shapes.AddPicture(iconAbstFile, 0, -1, 787.7f, 180f, 48f, 48f);
+                        picAbst.Name = "VoteEnDirect_IconAbst";
+                        modified = true;
                     }
                     catch { }
                 }
@@ -462,23 +535,24 @@ namespace VoteEnDirect
                     SetShapeSelfHyperlink(existingBtn, expectedSub);
                 }
 
+                float subBtnW = (float)Math.Round(slideW * 0.205);
+                float subBtnH = (float)Math.Round(slideH * 0.075);
+                float resetLeft = (float)Math.Round(slideW * 0.45);
+                float clearLeft = (float)Math.Round(slideW * 0.665);
+                float resetTop = (float)Math.Round(slideH * 0.76);
+
                 if (existingResetBtn == null)
                 {
-                    float resetW = (float)Math.Round(slideW * 0.28);
-                    float resetH = (float)Math.Round(slideH * 0.075);
-                    float resetLeft = (float)Math.Round(slideW * 0.52);
-                    float resetTop = (float)Math.Round(slideH * 0.76);
-
                     try
                     {
-                        dynamic rBtn = slide.Shapes.AddShape(5, resetLeft, resetTop, resetW, resetH);
+                        dynamic rBtn = slide.Shapes.AddShape(5, resetLeft, resetTop, subBtnW, subBtnH);
                         rBtn.Name = "VoteEnDirect_BtnReset";
                         rBtn.Fill.ForeColor.RGB = ToOleRgb(100, 116, 139);
                         rBtn.Line.ForeColor.RGB = ToOleRgb(71, 85, 105);
                         rBtn.Line.Weight = 1.5f;
-                        rBtn.TextFrame.TextRange.Text = "\u21BA REMISE \u00C0 Z\u00C9RO DU VOTE";
+                        rBtn.TextFrame.TextRange.Text = "\u21BA REMISE \u00C0 Z\u00C9RO VOTE";
                         rBtn.TextFrame.TextRange.Font.Name = "Calibri";
-                        rBtn.TextFrame.TextRange.Font.Size = 13;
+                        rBtn.TextFrame.TextRange.Font.Size = 11.5f;
                         rBtn.TextFrame.TextRange.Font.Bold = -1;
                         rBtn.TextFrame.TextRange.Font.Color.RGB = ToOleRgb(255, 255, 255);
                         rBtn.TextFrame.TextRange.ParagraphFormat.Alignment = 2;
@@ -495,7 +569,55 @@ namespace VoteEnDirect
                 }
                 else
                 {
+                    try
+                    {
+                        existingResetBtn.Left = resetLeft;
+                        existingResetBtn.Top = resetTop;
+                        existingResetBtn.Width = subBtnW;
+                        existingResetBtn.Height = subBtnH;
+                        existingResetBtn.TextFrame.TextRange.Font.Size = 11.5f;
+                    }
+                    catch { }
                     SetShapeSelfHyperlink(existingResetBtn, expectedSub);
+                }
+
+                if (existingClearUsersBtn == null)
+                {
+                    try
+                    {
+                        dynamic cBtn = slide.Shapes.AddShape(5, clearLeft, resetTop, subBtnW, subBtnH);
+                        cBtn.Name = "VoteEnDirect_BtnClearUsers";
+                        cBtn.Fill.ForeColor.RGB = ToOleRgb(225, 29, 72);
+                        cBtn.Line.ForeColor.RGB = ToOleRgb(159, 18, 57);
+                        cBtn.Line.Weight = 1.5f;
+                        cBtn.TextFrame.TextRange.Text = "\u2716 VIDER BASE VOTANTS";
+                        cBtn.TextFrame.TextRange.Font.Name = "Calibri";
+                        cBtn.TextFrame.TextRange.Font.Size = 11.5f;
+                        cBtn.TextFrame.TextRange.Font.Bold = -1;
+                        cBtn.TextFrame.TextRange.Font.Color.RGB = ToOleRgb(255, 255, 255);
+                        cBtn.TextFrame.TextRange.ParagraphFormat.Alignment = 2;
+
+                        SetShapeSelfHyperlink(cBtn, expectedSub);
+
+                        modified = true;
+                        Log("Added VoteEnDirect_BtnClearUsers on slide " + sIdx);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("AddShape clear users btn err: " + ex.Message);
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        existingClearUsersBtn.Left = clearLeft;
+                        existingClearUsersBtn.Top = resetTop;
+                        existingClearUsersBtn.Width = subBtnW;
+                        existingClearUsersBtn.Height = subBtnH;
+                    }
+                    catch { }
+                    SetShapeSelfHyperlink(existingClearUsersBtn, expectedSub);
                 }
             }
             catch (Exception ex)
@@ -540,8 +662,15 @@ namespace VoteEnDirect
                     {
                         shape.Fill.ForeColor.RGB = ToOleRgb(100, 116, 139);
                         shape.Line.ForeColor.RGB = ToOleRgb(71, 85, 105);
-                        shape.TextFrame.TextRange.Text = "\u21BA REMISE \u00C0 Z\u00C9RO DU VOTE";
-                        shape.TextFrame.TextRange.Font.Size = 13;
+                        shape.TextFrame.TextRange.Text = "\u21BA REMISE \u00C0 Z\u00C9RO VOTE";
+                        shape.TextFrame.TextRange.Font.Size = 11.5f;
+                    }
+                    else if (sName.StartsWith("VoteEnDirect_BtnClearUsers"))
+                    {
+                        shape.Fill.ForeColor.RGB = ToOleRgb(225, 29, 72);
+                        shape.Line.ForeColor.RGB = ToOleRgb(159, 18, 57);
+                        shape.TextFrame.TextRange.Text = "\u2716 VIDER BASE VOTANTS";
+                        shape.TextFrame.TextRange.Font.Size = 11.5f;
                     }
                 }
 
@@ -656,8 +785,8 @@ namespace VoteEnDirect
                 int[] pcts = new int[] { ouiPct, nonPct, abstPct };
                 int[] rgbs = new int[] { ToOleRgb(16, 185, 129), ToOleRgb(225, 29, 72), ToOleRgb(14, 165, 233) };
 
-                float startY = 200f;
-                float rowGap = 92f;
+                float startY = 192f;
+                float rowGap = 86f;
                 float barLeft = 225f;
                 float maxBarW = (float)Math.Max(260, slideW - 460);
 
@@ -665,7 +794,7 @@ namespace VoteEnDirect
                 {
                     float y = startY + (r * rowGap);
 
-                    dynamic lblShape = newSlide.Shapes.AddShape(5, 45f, y, 165f, 56f);
+                    dynamic lblShape = newSlide.Shapes.AddShape(5, 45f, y, 165f, 54f);
                     lblShape.Fill.ForeColor.RGB = rgbs[r];
                     lblShape.Line.Visible = 0;
                     lblShape.TextFrame.TextRange.Text = labels[r];
@@ -675,22 +804,69 @@ namespace VoteEnDirect
                     lblShape.TextFrame.TextRange.Font.Color.RGB = ToOleRgb(255, 255, 255);
                     lblShape.TextFrame.TextRange.ParagraphFormat.Alignment = 2;
 
-                    dynamic trackShape = newSlide.Shapes.AddShape(5, barLeft, y + 7f, maxBarW, 42f);
+                    dynamic trackShape = newSlide.Shapes.AddShape(5, barLeft, y + 6f, maxBarW, 42f);
                     trackShape.Fill.ForeColor.RGB = ToOleRgb(241, 245, 249);
                     trackShape.Line.ForeColor.RGB = ToOleRgb(203, 213, 225);
 
                     float fillW = (float)Math.Max(14, Math.Round((maxBarW * pcts[r]) / 100.0));
-                    dynamic fillShape = newSlide.Shapes.AddShape(5, barLeft, y + 7f, fillW, 42f);
+                    dynamic fillShape = newSlide.Shapes.AddShape(5, barLeft, y + 6f, fillW, 42f);
                     fillShape.Fill.ForeColor.RGB = rgbs[r];
                     fillShape.Line.Visible = 0;
 
-                    dynamic scoreBox = newSlide.Shapes.AddTextbox(1, barLeft + maxBarW + 15f, y + 5f, 185f, 46f);
+                    dynamic scoreBox = newSlide.Shapes.AddTextbox(1, barLeft + maxBarW + 15f, y + 4f, 185f, 46f);
                     scoreBox.TextFrame.TextRange.Text = counts[r] + " voix (" + pcts[r] + " %)";
                     scoreBox.TextFrame.TextRange.Font.Name = "Calibri";
                     scoreBox.TextFrame.TextRange.Font.Size = 18;
                     scoreBox.TextFrame.TextRange.Font.Bold = -1;
                     scoreBox.TextFrame.TextRange.Font.Color.RGB = ToOleRgb(15, 23, 42);
                 }
+
+                // 4. Pied de page en bas à droite (ex: "Collège des MN – 15/11/2026") identique au modèle
+                string footerText = "Coll\u00E8ge des MN \u2013 15/11/2026";
+                float footerLeft = 442.5f;
+                float footerTop = 479.8f;
+                float footerW = 503.4f;
+                float footerH = 50.9f;
+                string footerFont = "Futura";
+                float footerSize = 36f;
+                int footerColor = ToOleRgb(3, 116, 186);
+
+                try
+                {
+                    dynamic srcSlide = pres.Slides.Item(votingSlideIndex);
+                    int srcCount = (int)srcSlide.Shapes.Count;
+                    for (int s = 1; s <= srcCount; s++)
+                    {
+                        dynamic sh = srcSlide.Shapes.Item(s);
+                        if ((int)sh.HasTextFrame == -1 && (int)sh.TextFrame.HasText == -1)
+                        {
+                            string st = ((string)sh.TextFrame.TextRange.Text ?? "").Trim();
+                            if ((double)sh.Top > 430 && (st.Contains("Coll\u00E8ge") || st.Contains("202")))
+                            {
+                                footerText = st;
+                                footerLeft = (float)(double)sh.Left;
+                                footerTop = (float)(double)sh.Top;
+                                footerW = (float)(double)sh.Width;
+                                footerH = (float)(double)sh.Height;
+                                try { footerFont = (string)sh.TextFrame.TextRange.Font.Name; } catch { }
+                                try { footerSize = (float)(double)sh.TextFrame.TextRange.Font.Size; } catch { }
+                                try { footerColor = (int)sh.TextFrame.TextRange.Font.Color.RGB; } catch { }
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                dynamic footerBox = newSlide.Shapes.AddTextbox(1, footerLeft, footerTop, footerW, footerH);
+                footerBox.Name = "VoteEnDirect_ResultFooter";
+                footerBox.TextFrame.WordWrap = -1;
+                footerBox.TextFrame.TextRange.Text = footerText;
+                footerBox.TextFrame.TextRange.ParagraphFormat.Alignment = 2;
+                try { footerBox.TextFrame.TextRange.Font.Name = footerFont; } catch { footerBox.TextFrame.TextRange.Font.Name = "Calibri"; }
+                footerBox.TextFrame.TextRange.Font.Size = footerSize;
+                footerBox.TextFrame.TextRange.Font.Bold = -1;
+                footerBox.TextFrame.TextRange.Font.Color.RGB = footerColor;
 
                 _pendingGotoSlideAfterInsert = newIdx;
                 try { _pptApp.ActiveWindow.View.GotoSlide(newIdx); } catch { }
@@ -741,7 +917,7 @@ namespace VoteEnDirect
                         if (sh != null)
                         {
                             string sName = (string)sh.Name ?? "";
-                            if (sName.StartsWith("VoteEnDirect_BtnVote") || sName.StartsWith("VoteEnDirect_BtnReset"))
+                            if (sName.StartsWith("VoteEnDirect_BtnVote") || sName.StartsWith("VoteEnDirect_BtnReset") || sName.StartsWith("VoteEnDirect_BtnClearUsers"))
                             {
                                 _lastClickUtc = now;
                                 try { _pptApp.ActiveWindow.Selection.Unselect(); } catch { }
@@ -752,7 +928,9 @@ namespace VoteEnDirect
                                 }
                                 catch { }
                                 try { _pptApp.ActiveWindow.View.GotoSlide(currSlide); } catch { }
-                                string actionType = sName.StartsWith("VoteEnDirect_BtnReset") ? "RESET" : "VOTE";
+                                string actionType = sName.StartsWith("VoteEnDirect_BtnClearUsers")
+                                    ? "CLEAR_USERS"
+                                    : (sName.StartsWith("VoteEnDirect_BtnReset") ? "RESET" : "VOTE");
                                 Log("Button click (" + actionType + ") detected in Normal Mode on slide " + currSlide);
                                 return actionType;
                             }
@@ -768,6 +946,7 @@ namespace VoteEnDirect
                         dynamic slide = pres.Slides.Item(currSlide);
                         dynamic btnVoteShape = null;
                         dynamic btnResetShape = null;
+                        dynamic btnClearUsersShape = null;
                         int shCount = (int)slide.Shapes.Count;
                         for (int i = 1; i <= shCount; i++)
                         {
@@ -780,6 +959,10 @@ namespace VoteEnDirect
                             else if (sName.StartsWith("VoteEnDirect_BtnReset"))
                             {
                                 btnResetShape = shape;
+                            }
+                            else if (sName.StartsWith("VoteEnDirect_BtnClearUsers"))
+                            {
+                                btnClearUsersShape = shape;
                             }
                         }
 
@@ -822,15 +1005,29 @@ namespace VoteEnDirect
 
                                 if (btnResetShape != null)
                                 {
-                                    double minX = ((double)btnResetShape.Left / slideW) - 0.04;
-                                    double maxX = (((double)btnResetShape.Left + (double)btnResetShape.Width) / slideW) + 0.04;
-                                    double minY = ((double)btnResetShape.Top / slideH) - 0.04;
-                                    double maxY = (((double)btnResetShape.Top + (double)btnResetShape.Height) / slideH) + 0.04;
+                                    double minX = ((double)btnResetShape.Left / slideW) - 0.02;
+                                    double maxX = (((double)btnResetShape.Left + (double)btnResetShape.Width) / slideW) + 0.02;
+                                    double minY = ((double)btnResetShape.Top / slideH) - 0.03;
+                                    double maxY = (((double)btnResetShape.Top + (double)btnResetShape.Height) / slideH) + 0.03;
                                     if (relX >= minX && relX <= maxX && relY >= minY && relY <= maxY)
                                     {
                                         _lastClickUtc = now;
                                         Log("Button click (RESET) detected in SlideShow Mode on slide " + currSlide);
                                         return "RESET";
+                                    }
+                                }
+
+                                if (btnClearUsersShape != null)
+                                {
+                                    double minX = ((double)btnClearUsersShape.Left / slideW) - 0.02;
+                                    double maxX = (((double)btnClearUsersShape.Left + (double)btnClearUsersShape.Width) / slideW) + 0.02;
+                                    double minY = ((double)btnClearUsersShape.Top / slideH) - 0.03;
+                                    double maxY = (((double)btnClearUsersShape.Top + (double)btnClearUsersShape.Height) / slideH) + 0.03;
+                                    if (relX >= minX && relX <= maxX && relY >= minY && relY <= maxY)
+                                    {
+                                        _lastClickUtc = now;
+                                        Log("Button click (CLEAR_USERS) detected in SlideShow Mode on slide " + currSlide);
+                                        return "CLEAR_USERS";
                                     }
                                 }
                             }
@@ -840,6 +1037,41 @@ namespace VoteEnDirect
             }
             catch { }
             return "";
+        }
+
+        private void HandleClearParticipantsOnSlide(dynamic pres, int slideNum)
+        {
+            try
+            {
+                string resp = CallLocalApi("/api/ppt-action?op=clear_participants");
+                Log("HandleClearParticipantsOnSlide(" + slideNum + ") -> " + resp);
+
+                dynamic currSlideObj = pres.Slides.Item(slideNum);
+                int shCount = (int)currSlideObj.Shapes.Count;
+                for (int i = 1; i <= shCount; i++)
+                {
+                    dynamic shape = currSlideObj.Shapes.Item(i);
+                    string sName = (string)shape.Name ?? "";
+                    if (sName.StartsWith("VoteEnDirect_BtnClearUsers"))
+                    {
+                        shape.Fill.ForeColor.RGB = ToOleRgb(16, 185, 129);
+                        shape.Line.ForeColor.RGB = ToOleRgb(4, 120, 87);
+                        shape.TextFrame.TextRange.Text = "\u2713 BASE VOTANTS VID\u00C9E !";
+                    }
+                }
+
+                try
+                {
+                    string slidesDir = Path.Combine(_projectRoot, "public", "slides");
+                    if (!Directory.Exists(slidesDir)) Directory.CreateDirectory(slidesDir);
+                    currSlideObj.Export(Path.Combine(slidesDir, "slide-" + slideNum + ".png"), "PNG", 1280, 720);
+                }
+                catch { }
+            }
+            catch (Exception ex)
+            {
+                Log("HandleClearParticipantsOnSlide err: " + ex.Message);
+            }
         }
 
         private void HandleResetVoteOnSlide(dynamic pres, int slideNum)
@@ -1096,6 +1328,11 @@ namespace VoteEnDirect
                     HandleResetVoteOnSlide(pres, currSlide);
                     return;
                 }
+                else if (clickedAction == "CLEAR_USERS")
+                {
+                    HandleClearParticipantsOnSlide(pres, currSlide);
+                    return;
+                }
 
                 // 2. Si on change de slide, exporter uniquement ce slide et vérifier ses éléments de vote
                 if (_lastExportedSlide != currSlide)
@@ -1144,6 +1381,10 @@ namespace VoteEnDirect
                         {
                             HandleResetVoteOnSlide(pres, currSlide);
                         }
+                        else if (cmd == "CLICK_CLEAR_USERS")
+                        {
+                            HandleClearParticipantsOnSlide(pres, currSlide);
+                        }
                         else if (cmd.StartsWith("DELETE_SLIDE:"))
                         {
                             int delIdx = int.Parse(cmd.Substring(13));
@@ -1191,6 +1432,13 @@ namespace VoteEnDirect
                   screentip=""Intégrer le QR Code et le bouton de vote directement dans cette diapositive""
                   supertip=""Ajoute le QR Code de la séance et le bouton LANCER LE VOTE directement dans la diapositive affichée.""
                   onAction=""OnClickQrCode"" />
+          <button id=""BtnClearVotants""
+                  label=""Vider la Base des Votants""
+                  size=""large""
+                  imageMso=""Delete""
+                  screentip=""Réinitialiser la liste des participants connectés et leurs codes à 4 chiffres""
+                  supertip=""Vide la base des participants connectés pour permettre à tous de se reconnecter à zéro.""
+                  onAction=""OnClickClearVotants"" />
         </group>
         <group id=""GrpScrutin"" label=""2. Vote du Texte (OUI / NON / ABSTENTION)"">
           <button id=""BtnVoteSlide""
@@ -1333,6 +1581,29 @@ namespace VoteEnDirect
                 }
             }
             catch { }
+        }
+
+        public void OnClickClearVotants(object control)
+        {
+            try
+            {
+                EnsureViteServerRunning();
+                string resp = CallLocalApi("/api/ppt-action?op=clear_participants");
+                Log("OnClickClearVotants -> " + resp);
+                if (_pptApp != null && (int)_pptApp.Presentations.Count > 0)
+                {
+                    dynamic pres = _pptApp.ActivePresentation;
+                    int slideNum;
+                    string slideTitle;
+                    GetActiveSlideInfo(out slideNum, out slideTitle);
+                    HandleClearParticipantsOnSlide(pres, slideNum);
+                }
+                MessageBox.Show("La base des votants connectés (et leurs codes à 4 chiffres) a été entièrement remise à zéro.", "Vote en Direct — Base Votants Vidée", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Vote en Direct");
+            }
         }
 
         public void OnClickVoteSlide(object control)

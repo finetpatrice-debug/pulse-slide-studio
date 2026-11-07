@@ -633,6 +633,20 @@ export const pollService = {
     return data as Participant;
   },
 
+  async clearSessionParticipants(sessionId: string): Promise<void> {
+    try {
+      const db = await readLocalDb();
+      db.participants = db.participants.filter((p) => p.session_id !== sessionId);
+      db.votes = db.votes.filter((v) => v.session_id !== sessionId);
+      await writeLocalDb(db, sessionId);
+    } catch {}
+
+    if (isSupabaseConfigured) {
+      await supabase.from('votes').delete().eq('session_id', sessionId);
+      await supabase.from('participants').delete().eq('session_id', sessionId);
+    }
+  },
+
   // --------------------------------------------------------------------------
   // VOTES (Garantie : 1 seul vote unique et définitif par participant et par scrutin)
   // --------------------------------------------------------------------------

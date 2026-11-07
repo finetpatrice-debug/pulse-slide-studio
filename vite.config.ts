@@ -81,8 +81,16 @@ function saveServerDb(db: DbShape) {
 function getSupabaseAdminClient() {
   try {
     const env = loadEnv('development', process.cwd(), '');
-    const url = (env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-    const key = (env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+    const url = (
+      env.VITE_SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      'https://ztjppnonfccdytvgpqrl.supabase.co'
+    ).trim();
+    const key = (
+      env.VITE_SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      'sb_publishable_kaNBOm-Q29rHSWImjMnWAg_E0QB16Eu'
+    ).trim();
     if (url && key && !url.includes('votre-projet') && !key.includes('votre-cle')) {
       return createClient(url, key);
     }
@@ -230,6 +238,23 @@ function localVoteApiPlugin(): Plugin {
             }
             res.statusCode = 200;
             res.end('CLOSED|0|0|0|0');
+            return;
+          }
+
+          if (op === 'clear_participants') {
+            db.participants = [];
+            db.votes = [];
+            saveServerDb(db);
+            res.statusCode = 200;
+            res.end('CLEARED_PARTICIPANTS');
+            if (sb) {
+              void (async () => {
+                try {
+                  await sb.from('votes').delete().eq('session_id', String(session.id));
+                  await sb.from('participants').delete().eq('session_id', String(session.id));
+                } catch {}
+              })();
+            }
             return;
           }
 
