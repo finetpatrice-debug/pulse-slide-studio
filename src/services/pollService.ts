@@ -538,38 +538,81 @@ export const pollService = {
     return (data as Participant) ?? null;
   },
 
+  extractParticipantBaseName(nickname: string): string {
+    return (nickname || '').replace(/\s*#\d{4}\s*$/, '').trim();
+  },
+
+  extractParticipantPin(participant: Participant): string {
+    const m = (participant.nickname || '').match(/#(\d{4})\s*$/);
+    if (m) return m[1];
+    // Pour les anciens participants sans #XXXX dans le nom, code 4 chiffres déterministe basé sur l'ID
+    let hash = 0;
+    const src = participant.id || participant.nickname || '1000';
+    for (let i = 0; i < src.length; i++) {
+      hash = (hash * 31 + src.charCodeAt(i)) >>> 0;
+    }
+    return String((hash % 9000) + 1000);
+  },
+
   async joinSession(
     sessionId: string,
     nickname: string,
-    existingParticipantId?: string | null
+    existingParticipantId?: string | null,
+    pinCode?: string | null
   ): Promise<Participant> {
-    const cleanName = nickname.trim();
-    if (!cleanName) throw new Error('Le pseudo est requis.');
+    const rawInput = nickname.trim();
+    if (!rawInput) throw new Error('Veuillez saisir votre nom ou votre code à 4 chiffres.');
 
-    // Vérifie si le participant existe déjà pour cette session (par ID ou par Nom/Prénom identique)
-    if (existingParticipantId) {
-      const existing = await this.getParticipantById(existingParticipantId);
-      if (existing && existing.session_id === sessionId) {
-        return existing;
+    const allParticipants = await this.getParticipantsBySession(sessionId);
+
+    // 1. Si l'utilisateur saisit directement son code à 4 chiffres dans le champ principal
+    if (/^\d{4}$/.test(rawInput)) {
+      const byDirectPin = allParticipants.find((p) => this.extractParticipantPin(p) === rawInput);
+      if (!byDirectPin) {
+        throw new Error(`Aucun votant inscrit avec le code #${rawInput}. Saisissez votre Nom et Prénom.`);
       }
+      return byDirectPin;
     }
+
+    const cleanName = this.extractParticipantBaseName(rawInput);
+    const normalizedTarget = cleanName.toLowerCase().replace(/\s+/g, ' ');
+    const cleanPin = (pinCode || '').trim();
+
+    // 2. Chercher si ce nom est déjà inscrit dans cette séance
+    const existingByName = allParticipants.find(
+      (p) =>
+        this.extractParticipantBaseName(p.nickname).toLowerCase().replace(/\s+/g, ' ') ===
+        normalizedTarget
+    );
+
+    if (existingByName) {
+      const expectedPin = this.extractParticipantPin(existingByName);
+      if (existingParticipantId && existingParticipantId === existingByName.id && !cleanPin) {
+        return existingByName;
+      }
+      if (!cleanPin) {
+        throw new Error('PIN_REQUIRED');
+      }
+      if (cleanPin !== expectedPin) {
+        throw new Error('Code à 4 chiffres incorrect pour ce nom.');
+      }
+      return existingByName;
+    }
+
+    // 3. Nouveau participant : générer un code unique à 4 chiffres pour cette séance
+    const usedPins = new Set(allParticipants.map((p) => this.extractParticipantPin(p)));
+    let newPin = String(Math.floor(1000 + Math.random() * 9000));
+    while (usedPins.has(newPin)) {
+      newPin = String(Math.floor(1000 + Math.random() * 9000));
+    }
+    const nicknameWithPin = `${cleanName} #${newPin}`;
 
     if (!isSupabaseConfigured) {
       const db = await readLocalDb();
-      const normalizedNickname = cleanName.toLowerCase();
-      const existingByName = db.participants.find(
-        (p) =>
-          p.session_id === sessionId &&
-          p.nickname.trim().toLowerCase() === normalizedNickname
-      );
-      if (existingByName) {
-        return existingByName;
-      }
-
       const participant: Participant = {
         id: generateUUID(),
         session_id: sessionId,
-        nickname: cleanName,
+        nickname: nicknameWithPin,
         created_at: new Date().toISOString(),
       };
       db.participants.push(participant);
@@ -581,7 +624,7 @@ export const pollService = {
       .from('participants')
       .insert({
         session_id: sessionId,
-        nickname: cleanName,
+        nickname: nicknameWithPin,
       })
       .select('*')
       .single();
@@ -701,6 +744,15 @@ export const pollService = {
       db.votes.push(newVote);
       await writeLocalDb(db, params.session_id);
       return newVote;
+    }
+
+    // Verrouillage strict côté Supabase : si un vote existe déjà pour ce participant sur cette question, il est immuable
+    const existingSupabaseVote = await this.getParticipantVoteForQuestion(
+      params.question_id,
+      params.participant_id
+    );
+    if (existingSupabaseVote) {
+      return existingSupabaseVote;
     }
 
     const { data, error } = await supabase

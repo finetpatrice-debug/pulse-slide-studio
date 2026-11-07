@@ -28,6 +28,9 @@ export default function ParticipantJoinPage() {
 
   const [codeInput, setCodeInput] = useState(sessionCode?.toUpperCase() || '');
   const [nicknameInput, setNicknameInput] = useState('');
+  const [pinInput, setPinInput] = useState('');
+  const [requiresPin, setRequiresPin] = useState(false);
+  const [justAssignedPin, setJustAssignedPin] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,12 +298,20 @@ export default function ParticipantJoinPage() {
       }
 
       const savedId = localStorage.getItem(getParticipantStorageKey(currentSession.id));
+      const trimmedInput = nicknameInput.trim();
       const joined = await pollService.joinSession(
         currentSession.id,
-        nicknameInput.trim(),
-        savedId
+        trimmedInput,
+        savedId,
+        pinInput.trim()
       );
 
+      const assignedPin = pollService.extractParticipantPin(joined);
+      if (!requiresPin && !/^\d{4}$/.test(trimmedInput) && savedId !== joined.id) {
+        setJustAssignedPin(assignedPin);
+      }
+      setRequiresPin(false);
+      setPinInput('');
       localStorage.setItem(getParticipantStorageKey(currentSession.id), joined.id);
       setParticipant(joined);
 
@@ -308,7 +319,14 @@ export default function ParticipantJoinPage() {
         navigate(`/join/${targetCode}`, { replace: true });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Impossible de rejoindre la séance.');
+      if (err instanceof Error && err.message === 'PIN_REQUIRED') {
+        setRequiresPin(true);
+        setError(
+          'Ce nom est déjà inscrit dans cette séance. Saisissez votre code personnel à 4 chiffres pour reprendre votre accès.'
+        );
+      } else {
+        setError(err instanceof Error ? err.message : 'Impossible de rejoindre la séance.');
+      }
     } finally {
       setJoining(false);
     }
@@ -365,6 +383,11 @@ export default function ParticipantJoinPage() {
       localStorage.removeItem(getParticipantStorageKey(session.id));
     }
     setParticipant(null);
+    setNicknameInput('');
+    setPinInput('');
+    setRequiresPin(false);
+    setJustAssignedPin(null);
+    setError(null);
     setDraftChoice('');
     setSelectedAnswer('');
     setVoteConfirmed(false);
@@ -425,7 +448,7 @@ export default function ParticipantJoinPage() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Votre Nom et Prénom
+                Votre Nom et Prénom (ou votre code à 4 chiffres)
               </label>
               <div className="relative">
                 <User className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -433,21 +456,55 @@ export default function ParticipantJoinPage() {
                   type="text"
                   maxLength={40}
                   value={nicknameInput}
-                  onChange={(e) => setNicknameInput(e.target.value)}
-                  placeholder="Ex: Jean Dupont"
+                  onChange={(e) => {
+                    setNicknameInput(e.target.value);
+                    if (requiresPin) {
+                      setRequiresPin(false);
+                      setPinInput('');
+                      setError(null);
+                    }
+                  }}
+                  placeholder="Ex: Jean Dupont ou 4829"
                   autoFocus
                   className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-950 border border-white/15 text-white text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
+              <p className="text-xs text-slate-400 mt-1.5">
+                À votre 1re connexion, un <strong>code personnel à 4 chiffres</strong> vous sera attribué pour garantir un vote unique.
+              </p>
             </div>
+
+            {requiresPin && (
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-400/50 space-y-2">
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                  Votre code personnel à 4 chiffres
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  maxLength={4}
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="Ex: 4829"
+                  autoFocus
+                  className="w-full px-4 py-3.5 rounded-xl bg-slate-950 border border-amber-400/50 text-white font-mono text-2xl font-black tracking-[0.35em] text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  required
+                />
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={joining}
               className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold text-base shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {joining ? 'Connexion...' : 'Accéder au vote'}
+              {joining
+                ? 'Vérification...'
+                : requiresPin
+                ? 'Valider mon code à 4 chiffres'
+                : 'Accéder au vote'}
             </button>
           </form>
         </div>
@@ -466,6 +523,9 @@ export default function ParticipantJoinPage() {
     ? activeQuestion.correct_option
     : `${baseUrl}slides/slide-${activeSlideNumber}.png?v=20261106g`;
 
+  const participantBaseName = pollService.extractParticipantBaseName(participant.nickname);
+  const participantPin = pollService.extractParticipantPin(participant);
+
   const isVotingOpen = Boolean(activeQuestion && activeQuestion.is_open);
   const isShowingClosedResult = Boolean(
     activeQuestion &&
@@ -482,6 +542,45 @@ export default function ParticipantJoinPage() {
       }}
       className="min-h-[100dvh] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col justify-between"
     >
+      {/* Modale d'attribution du code personnel à 4 chiffres à la 1re connexion */}
+      {justAssignedPin && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setJustAssignedPin(null)}
+        >
+          <div
+            className="max-w-sm w-full bg-slate-900 border-2 border-indigo-400/60 rounded-3xl p-6 text-center shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="inline-flex px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 text-xs font-extrabold uppercase tracking-wider">
+              Identification sécurisée
+            </div>
+            <h2 className="text-lg font-extrabold text-white">
+              Bienvenue, {participantBaseName}
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Voici votre <strong>numéro personnel à 4 chiffres</strong> pour toute la séance :
+            </p>
+            <div className="py-4 px-6 rounded-2xl bg-slate-950 border-2 border-emerald-400/70 font-mono text-4xl font-black tracking-[0.35em] text-emerald-400 shadow-inner">
+              {justAssignedPin}
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Ce code garantit un vote unique et vous permet de reprendre votre session si vous prêtez votre GSM à un collègue.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                tryEnterFullscreen();
+                setJustAssignedPin(null);
+              }}
+              className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-lg transition"
+            >
+              J'ai noté mon code ({justAssignedPin}) — Continuer
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modale plein écran pour zoomer sur la diapositive du vote */}
       {isSlideZoomed && !slideImgFailed && (isVotingOpen || isShowingClosedResult) && (
         <div
@@ -521,11 +620,16 @@ export default function ParticipantJoinPage() {
           <div className="space-y-2.5 my-auto">
             <div className="bg-slate-900 border border-white/15 rounded-2xl p-2.5 shadow-xl space-y-2">
               <div className="flex items-center justify-between gap-1.5 px-1">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Vote en cours ({participant.nickname})
-                </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <span className="text-xs font-bold text-white truncate">
+                    {participantBaseName}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 font-mono text-xs font-black shrink-0">
+                    #{participantPin}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
                   {!isFullscreen && (
                     <button
                       type="button"
@@ -533,7 +637,7 @@ export default function ParticipantJoinPage() {
                         e.stopPropagation();
                         tryEnterFullscreen();
                       }}
-                      className="text-[11px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/40 inline-flex items-center gap-1"
+                      className="text-xs font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/40 inline-flex items-center gap-1"
                     >
                       <Maximize2 className="w-3 h-3" />
                       Plein écran
@@ -547,12 +651,24 @@ export default function ParticipantJoinPage() {
                         tryEnterFullscreen();
                         setIsSlideZoomed(true);
                       }}
-                      className="text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
+                      className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
                     >
                       <Maximize2 className="w-3 h-3 text-indigo-400" />
                       Loupe
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLeaveParticipant();
+                    }}
+                    title="Prêter ce GSM / Changer de votant"
+                    className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
+                  >
+                    <LogOut className="w-3 h-3 text-amber-400" />
+                    Prêter
+                  </button>
                 </div>
               </div>
 
@@ -782,9 +898,14 @@ export default function ParticipantJoinPage() {
         ) : (
           /* ÉTAT 3 : EN ATTENTE DU VOTE SUIVANT (AUCUNE DIAPOSITIVE AFFICHÉE HORS SCRUTIN) */
           <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 text-center shadow-2xl my-auto space-y-4">
-            <div className="flex items-center justify-between text-xs text-slate-400 pb-1 border-b border-white/10">
-              <span className="font-semibold text-white truncate">{participant.nickname}</span>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-white/10 gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-bold text-white truncate">{participantBaseName}</span>
+                <span className="px-2 py-0.5 rounded-md bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 font-mono font-black shrink-0">
+                  Code #{participantPin}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
                 {!isFullscreen && (
                   <button
                     type="button"
@@ -792,7 +913,7 @@ export default function ParticipantJoinPage() {
                       e.stopPropagation();
                       tryEnterFullscreen();
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold inline-flex items-center gap-1"
+                    className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold inline-flex items-center gap-1"
                   >
                     <Maximize2 className="w-3 h-3" />
                     Plein écran
@@ -801,10 +922,11 @@ export default function ParticipantJoinPage() {
                 <button
                   type="button"
                   onClick={handleLeaveParticipant}
-                  title="Changer de participant"
-                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                  title="Prêter ce GSM / Changer de votant"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 font-semibold inline-flex items-center gap-1 transition"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <LogOut className="w-3.5 h-3.5 text-amber-400" />
+                  Prêter GSM
                 </button>
               </div>
             </div>
