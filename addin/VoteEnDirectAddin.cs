@@ -1514,7 +1514,7 @@ namespace VoteEnDirect
                 GetActiveSlideInfo(out slideNum, out slideTitle);
 
                 string encodedTitle = Uri.EscapeDataString(slideTitle ?? "");
-                string url = "http://localhost:5173/?" + queryParams + "&pptSlide=" + slideNum + "&pptTitle=" + encodedTitle + "&t=" + DateTime.Now.Ticks;
+                string url = "http://127.0.0.1:5173/?" + queryParams + "&pptSlide=" + slideNum + "&pptTitle=" + encodedTitle + "&t=" + DateTime.Now.Ticks;
                 Process.Start(url);
             }
             catch (Exception ex)

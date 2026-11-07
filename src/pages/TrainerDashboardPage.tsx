@@ -48,8 +48,14 @@ export default function TrainerDashboardPage() {
   // - 'qr' : QR Code de connexion
   // - 'vote' : Scrutin en direct & Clôture avec insertion de diapo de résultat
   // - 'history' : Procès-Verbal & Export CSV
-  // Par défaut, mode 'trigger' (mini barre discrète en haut à droite) pour laisser la diapositive PowerPoint 100% visible
-  const [activeTab, setActiveTab] = useState<ActiveTab>('trigger');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const act = params.get('pptAction');
+    if (act === 'history') return 'history';
+    if (act === 'qr') return 'qr';
+    if (act === 'vote') return 'vote';
+    return 'trigger';
+  });
   const [copiedLink, setCopiedLink] = useState(false);
   const [insertingSlide, setInsertingSlide] = useState(false);
   const [resultSlideMessage, setResultSlideMessage] = useState<string | null>(null);
@@ -169,7 +175,11 @@ export default function TrainerDashboardPage() {
 
   const loadSessionDetails = async (target: Session) => {
     setSession(target);
-    setSearchParams({ session: target.code });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('session', target.code);
+      return next;
+    });
     const [qList, pList, vList] = await Promise.all([
       pollService.getQuestionsBySession(target.id),
       pollService.getParticipantsBySession(target.id),
