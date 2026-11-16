@@ -668,11 +668,13 @@ namespace VoteEnDirect
 
                 if ((int)_pptApp.SlideShowWindows.Count > 0)
                 {
-                    dynamic ssView = _pptApp.SlideShowWindows.Item(1).View;
+                    dynamic ssWin = _pptApp.SlideShowWindows.Item(1);
+                    dynamic ssView = ssWin.View;
                     if ((int)ssView.CurrentShowPosition == slideIndex)
                     {
                         ssView.GotoSlide(slideIndex);
                     }
+                    try { ssWin.Activate(); } catch { }
                 }
 
                 try
@@ -861,10 +863,18 @@ namespace VoteEnDirect
                 footerBox.TextFrame.TextRange.Font.Color.RGB = footerColor;
 
                 _pendingGotoSlideAfterInsert = newIdx;
-                try { _pptApp.ActiveWindow.View.GotoSlide(newIdx); } catch { }
                 if ((int)_pptApp.SlideShowWindows.Count > 0)
                 {
-                    try { _pptApp.SlideShowWindows.Item(1).View.GotoSlide(newIdx); } catch { }
+                    try
+                    {
+                        _pptApp.SlideShowWindows.Item(1).View.GotoSlide(newIdx);
+                        _pptApp.SlideShowWindows.Item(1).Activate();
+                    }
+                    catch { }
+                }
+                else
+                {
+                    try { _pptApp.ActiveWindow.View.GotoSlide(newIdx); } catch { }
                 }
 
                 try
@@ -1287,10 +1297,18 @@ namespace VoteEnDirect
                 {
                     int targetAfterInsert = _pendingGotoSlideAfterInsert;
                     _pendingGotoSlideAfterInsert = -1;
-                    try { _pptApp.ActiveWindow.View.GotoSlide(targetAfterInsert); } catch { }
                     if (inSlideShow)
                     {
-                        try { _pptApp.SlideShowWindows.Item(1).View.GotoSlide(targetAfterInsert); } catch { }
+                        try
+                        {
+                            _pptApp.SlideShowWindows.Item(1).View.GotoSlide(targetAfterInsert);
+                            _pptApp.SlideShowWindows.Item(1).Activate();
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        try { _pptApp.ActiveWindow.View.GotoSlide(targetAfterInsert); } catch { }
                     }
                     Log("Auto-advanced to Result Slide " + targetAfterInsert);
                 }
