@@ -38,6 +38,9 @@ export const supabase = createClient(
  * localhost par l'adresse IPv4 locale détectée par Vite (ex: http://192.168.1.x:5173).
  */
 export function getNetworkBaseUrl(): string {
+  if (isSupabaseConfigured) {
+    return 'https://finetpatrice-debug.github.io/pulse-slide-studio';
+  }
   const { protocol, hostname, port } = window.location;
   const localLanIp = typeof __LOCAL_LAN_IP__ !== 'undefined' ? __LOCAL_LAN_IP__ : null;
 

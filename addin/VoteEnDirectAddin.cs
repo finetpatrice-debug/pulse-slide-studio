@@ -341,7 +341,7 @@ namespace VoteEnDirect
                         {
                             string altTxt = "";
                             try { altTxt = (string)shape.AlternativeText ?? ""; } catch { }
-                            if (altTxt == "GITHUB_PAGES_QR_V1")
+                            if (altTxt == "GITHUB_PAGES_QR_V2")
                             {
                                 alreadyHasQr = true;
                             }
@@ -481,7 +481,7 @@ namespace VoteEnDirect
                     {
                         dynamic newPic = slide.Shapes.AddPicture(qrFile, 0, -1, qrLeft, qrTop, qrSize, qrSize);
                         newPic.Name = "VoteEnDirect_QR";
-                        try { newPic.AlternativeText = "GITHUB_PAGES_QR_V1"; } catch { }
+                        try { newPic.AlternativeText = "GITHUB_PAGES_QR_V2"; } catch { }
                         modified = true;
                         Log("Added VoteEnDirect_QR on slide " + (int)slide.SlideIndex);
                     }
@@ -495,23 +495,28 @@ namespace VoteEnDirect
                 int sIdx = (int)slide.SlideIndex;
                 string expectedSub = sId + "," + sIdx + ",VoteEnDirect";
 
+                float btnW = 130f;
+                float btnH = 40.5f;
+                float btnLeft = 429f;
+                float btnTop = 410f;
+
                 if (existingBtn == null)
                 {
-                    float btnW = (float)Math.Round(slideW * 0.42);
-                    float btnH = (float)Math.Round(slideH * 0.12);
-                    float btnLeft = (float)Math.Round(slideW * 0.45);
-                    float btnTop = (float)Math.Round(slideH * 0.62);
-
                     try
                     {
                         dynamic btn = slide.Shapes.AddShape(5, btnLeft, btnTop, btnW, btnH);
                         btn.Name = "VoteEnDirect_BtnVote";
                         btn.Fill.ForeColor.RGB = ToOleRgb(16, 185, 129);
                         btn.Line.ForeColor.RGB = ToOleRgb(4, 120, 87);
-                        btn.Line.Weight = 2.25f;
-                        btn.TextFrame.TextRange.Text = "\u25B6 LANCER LE VOTE SUR CE SLIDE";
+                        btn.Line.Weight = 1.75f;
+                        btn.TextFrame.WordWrap = 0;
+                        btn.TextFrame.MarginLeft = 4f;
+                        btn.TextFrame.MarginRight = 4f;
+                        btn.TextFrame.MarginTop = 2f;
+                        btn.TextFrame.MarginBottom = 2f;
+                        btn.TextFrame.TextRange.Text = "\u25B6 LANCER VOTE";
                         btn.TextFrame.TextRange.Font.Name = "Calibri";
-                        btn.TextFrame.TextRange.Font.Size = 16;
+                        btn.TextFrame.TextRange.Font.Size = 10;
                         btn.TextFrame.TextRange.Font.Bold = -1;
                         btn.TextFrame.TextRange.Font.Color.RGB = ToOleRgb(255, 255, 255);
                         btn.TextFrame.TextRange.ParagraphFormat.Alignment = 2;
@@ -528,13 +533,32 @@ namespace VoteEnDirect
                 }
                 else
                 {
+                    try
+                    {
+                        existingBtn.Left = btnLeft;
+                        existingBtn.Top = btnTop;
+                        existingBtn.Width = btnW;
+                        existingBtn.Height = btnH;
+                        existingBtn.TextFrame.WordWrap = 0;
+                        existingBtn.TextFrame.MarginLeft = 4f;
+                        existingBtn.TextFrame.MarginRight = 4f;
+                        existingBtn.TextFrame.MarginTop = 2f;
+                        existingBtn.TextFrame.MarginBottom = 2f;
+                        string curTxt = (string)existingBtn.TextFrame.TextRange.Text ?? "";
+                        if (curTxt.IndexOf("SUR CE SLIDE", StringComparison.OrdinalIgnoreCase) >= 0 || curTxt.Trim().Length == 0)
+                        {
+                            existingBtn.TextFrame.TextRange.Text = "\u25B6 LANCER VOTE";
+                        }
+                        existingBtn.TextFrame.TextRange.Font.Size = 10;
+                    }
+                    catch { }
                     SetShapeSelfHyperlink(existingBtn, expectedSub);
                 }
 
-                float resetW = (float)Math.Round(slideW * 0.28);
-                float resetH = (float)Math.Round(slideH * 0.075);
-                float resetLeft = (float)Math.Round(slideW * 0.52);
-                float resetTop = (float)Math.Round(slideH * 0.76);
+                float resetW = 269f;
+                float resetH = 40.5f;
+                float resetLeft = 571f;
+                float resetTop = 410f;
 
                 if (existingResetBtn == null)
                 {
@@ -597,25 +621,44 @@ namespace VoteEnDirect
                     string sName = (string)shape.Name ?? "";
                     if (sName.StartsWith("VoteEnDirect_BtnVote"))
                     {
+                        try
+                        {
+                            shape.Left = 429f;
+                            shape.Top = 410f;
+                            shape.Width = 130f;
+                            shape.Height = 40.5f;
+                            shape.TextFrame.WordWrap = 0;
+                            shape.TextFrame.MarginLeft = 4f;
+                            shape.TextFrame.MarginRight = 4f;
+                            shape.TextFrame.MarginTop = 2f;
+                            shape.TextFrame.MarginBottom = 2f;
+                        }
+                        catch { }
                         if (isOpen)
                         {
                             shape.Fill.ForeColor.RGB = ToOleRgb(234, 88, 12);
                             shape.Line.ForeColor.RGB = ToOleRgb(194, 65, 12);
-                            string line1 = "\u23F9 CL\u00D4TURER & AFFICHER R\u00C9SULTAT";
-                            string line2 = "(" + voteCount + " vote(s) re\u00E7u(s) \u2014 Cliquez ici pour cl\u00F4turer)";
-                            shape.TextFrame.TextRange.Text = line1 + "\r\n" + line2;
-                            shape.TextFrame.TextRange.Font.Size = 14;
+                            shape.TextFrame.TextRange.Text = "\u23F9 CL\u00D4TURER (" + voteCount + ")";
+                            shape.TextFrame.TextRange.Font.Size = 10;
                         }
                         else
                         {
                             shape.Fill.ForeColor.RGB = ToOleRgb(16, 185, 129);
                             shape.Line.ForeColor.RGB = ToOleRgb(4, 120, 87);
-                            shape.TextFrame.TextRange.Text = "\u25B6 LANCER LE VOTE SUR CE SLIDE";
-                            shape.TextFrame.TextRange.Font.Size = 16;
+                            shape.TextFrame.TextRange.Text = "\u25B6 LANCER VOTE";
+                            shape.TextFrame.TextRange.Font.Size = 10;
                         }
                     }
                     else if (sName.StartsWith("VoteEnDirect_BtnReset"))
                     {
+                        try
+                        {
+                            shape.Left = 571f;
+                            shape.Top = 410f;
+                            shape.Width = 269f;
+                            shape.Height = 40.5f;
+                        }
+                        catch { }
                         shape.Fill.ForeColor.RGB = ToOleRgb(100, 116, 139);
                         shape.Line.ForeColor.RGB = ToOleRgb(71, 85, 105);
                         shape.TextFrame.TextRange.Text = "\u21BA REMISE \u00C0 Z\u00C9RO DU VOTE";

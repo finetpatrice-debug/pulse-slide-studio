@@ -158,9 +158,38 @@ export default function ParticipantJoinPage() {
   useEffect(() => {
     if (!session?.id) return;
 
+    const verifyParticipantStillExists = async () => {
+      const savedId = localStorage.getItem(getParticipantStorageKey(session.id));
+      if (!savedId) return;
+      const stillThere = await pollService.getParticipantById(savedId);
+      if (!stillThere) {
+        localStorage.removeItem(getParticipantStorageKey(session.id));
+        setParticipant(null);
+        setDraftChoice('');
+        setSelectedAnswer('');
+        setVoteConfirmed(false);
+      }
+    };
+
     const unsubscribe = pollService.subscribeToSessionRealtime(session.id, {
-      onSessionUpdate: (updatedSession) => setSession(updatedSession),
-      onQuestionsChange: (updatedQuestions) => setAllQuestions(updatedQuestions),
+      onSessionUpdate: (updatedSession) => {
+        setSession(updatedSession);
+        void verifyParticipantStillExists();
+      },
+      onQuestionsChange: (updatedQuestions) => {
+        setAllQuestions(updatedQuestions);
+        void verifyParticipantStillExists();
+      },
+      onParticipantsChange: (updatedParticipants) => {
+        const savedId = localStorage.getItem(getParticipantStorageKey(session.id));
+        if (savedId && !updatedParticipants.some((p) => p.id === savedId)) {
+          localStorage.removeItem(getParticipantStorageKey(session.id));
+          setParticipant(null);
+          setDraftChoice('');
+          setSelectedAnswer('');
+          setVoteConfirmed(false);
+        }
+      },
       onVotesChange: (updatedVotes) => setSessionVotes(updatedVotes),
     });
 

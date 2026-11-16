@@ -247,6 +247,9 @@ function localVoteApiPlugin(): Plugin {
           if (op === 'clear_participants') {
             db.participants = [];
             db.votes = [];
+            db.questions = [];
+            session.active_question_id = null;
+            session.show_results = false;
             saveServerDb(db);
             res.statusCode = 200;
             res.end('CLEARED_PARTICIPANTS');
@@ -255,6 +258,11 @@ function localVoteApiPlugin(): Plugin {
                 try {
                   await sb.from('votes').delete().eq('session_id', String(session.id));
                   await sb.from('participants').delete().eq('session_id', String(session.id));
+                  await sb.from('questions').delete().eq('session_id', String(session.id));
+                  await sb
+                    .from('sessions')
+                    .update({ active_question_id: null, show_results: false })
+                    .eq('id', String(session.id));
                 } catch {}
               })();
             }
@@ -537,12 +545,7 @@ function localVoteApiPlugin(): Plugin {
                 db = incoming;
                 saveServerDb(db);
               } else if (payload.action === 'SAVE_QR_PNG' && typeof payload.dataUrl === 'string') {
-                try {
-                  const base64 = payload.dataUrl.replace(/^data:image\/png;base64,/, '');
-                  const slidesDir = path.resolve(process.cwd(), 'public', 'slides');
-                  fs.mkdirSync(slidesDir, { recursive: true });
-                  fs.writeFileSync(path.join(slidesDir, 'qr-session.png'), Buffer.from(base64, 'base64'));
-                } catch {}
+                // Conserver le QR Code public GitHub Pages dans qr-session.png (ne pas l'écraser par une IP locale 172.x / 192.x)
               }
 
               res.statusCode = 200;
