@@ -283,7 +283,7 @@ export const pollService = {
 
     const { data, error } = await supabase
       .from('questions')
-      .select('*')
+      .select('id, session_id, title, type, options, slide_number, is_open, order_index, created_at')
       .eq('session_id', sessionId)
       .neq('title', '__SLIDE_PREVIEW__')
       .order('order_index', { ascending: true })
@@ -860,6 +860,9 @@ export const pollService = {
       };
     }
 
+    let lastSeenState = '';
+    let lastVotesFetchMs = 0;
+
     const channel = supabase
       .channel(`session-live-${sessionId}-${Math.random().toString(36).slice(2, 7)}`)
       .on(
@@ -871,12 +874,20 @@ export const pollService = {
           filter: `id=eq.${sessionId}`,
         },
         async (payload) => {
-          if (payload.new && callbacks.onSessionUpdate) {
-            callbacks.onSessionUpdate(payload.new as Session);
+          const updated = payload.new as Session | undefined;
+          if (updated) {
+            lastSeenState = `${updated.active_question_id || ''}|${Boolean(updated.show_results)}|${updated.current_slide || 1}`;
+            if (callbacks.onSessionUpdate) {
+              callbacks.onSessionUpdate(updated);
+            }
           }
           if (callbacks.onQuestionsChange) {
             const list = await this.getQuestionsBySession(sessionId);
             callbacks.onQuestionsChange(list);
+          }
+          if (updated?.show_results && callbacks.onVotesChange) {
+            const v = await this.getVotesBySession(sessionId);
+            callbacks.onVotesChange(v);
           }
         }
       )
@@ -919,7 +930,9 @@ export const pollService = {
           filter: `session_id=eq.${sessionId}`,
         },
         async () => {
-          if (callbacks.onVotesChange) {
+          const now = Date.now();
+          if (callbacks.onVotesChange && now - lastVotesFetchMs >= 2000) {
+            lastVotesFetchMs = now;
             const list = await this.getVotesBySession(sessionId);
             callbacks.onVotesChange(list);
           }
@@ -931,22 +944,27 @@ export const pollService = {
       typeof window !== 'undefined'
         ? window.setInterval(async () => {
             try {
-              if (callbacks.onSessionUpdate) {
-                const s = await this.getSessionById(sessionId);
-                if (s) callbacks.onSessionUpdate(s);
-              }
-              if (callbacks.onQuestionsChange) {
-                const q = await this.getQuestionsBySession(sessionId);
-                callbacks.onQuestionsChange(q);
-              }
-              if (callbacks.onVotesChange) {
-                const v = await this.getVotesBySession(sessionId);
-                callbacks.onVotesChange(v);
+              const s = await this.getSessionById(sessionId);
+              if (!s) return;
+              const nextState = `${s.active_question_id || ''}|${Boolean(s.show_results)}|${s.current_slide || 1}`;
+              if (nextState !== lastSeenState) {
+                lastSeenState = nextState;
+                if (callbacks.onSessionUpdate) {
+                  callbacks.onSessionUpdate(s);
+                }
+                if (callbacks.onQuestionsChange) {
+                  const q = await this.getQuestionsBySession(sessionId);
+                  callbacks.onQuestionsChange(q);
+                }
+                if (s.show_results && callbacks.onVotesChange) {
+                  const v = await this.getVotesBySession(sessionId);
+                  callbacks.onVotesChange(v);
+                }
               }
             } catch {
               // Ignorer erreurs réseau temporaires sur GSM
             }
-          }, 2500)
+          }, 4000)
         : null;
 
     return () => {

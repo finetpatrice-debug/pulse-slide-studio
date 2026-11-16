@@ -643,20 +643,6 @@ export default function ParticipantJoinPage() {
                       Plein écran
                     </button>
                   )}
-                  {!slideImgFailed && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        tryEnterFullscreen();
-                        setIsSlideZoomed(true);
-                      }}
-                      className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
-                    >
-                      <Maximize2 className="w-3 h-3 text-indigo-400" />
-                      Loupe
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -672,23 +658,20 @@ export default function ParticipantJoinPage() {
                 </div>
               </div>
 
-              {!slideImgFailed && (
-                <div
-                  onClick={() => setIsSlideZoomed(true)}
-                  className="relative rounded-xl overflow-hidden border border-white/20 bg-white shadow-md cursor-zoom-in flex items-center justify-center"
-                >
-                  <img
-                    src={slideImageUrl}
-                    alt="Diapositive soumise au vote"
-                    onError={() => setSlideImgFailed(true)}
-                    className="w-full max-h-[28dvh] h-auto block object-contain mx-auto"
-                  />
+              <div className="rounded-2xl bg-gradient-to-br from-indigo-950/90 via-slate-950 to-slate-900 border-2 border-indigo-400/50 p-4 shadow-inner space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/25 border border-indigo-400/40 text-indigo-200 text-xs font-extrabold uppercase tracking-wider">
+                    Diapositive {activeSlideNumber}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-400 uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Scrutin ouvert
+                  </span>
                 </div>
-              )}
-
-              <h2 className="text-xs sm:text-sm font-extrabold text-white leading-snug px-1 line-clamp-2">
-                {activeQuestion.title}
-              </h2>
+                <h2 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
+                  {activeQuestion.title}
+                </h2>
+              </div>
             </div>
 
             {error && (
@@ -799,30 +782,16 @@ export default function ParticipantJoinPage() {
               </div>
             )}
 
-            {!slideImgFailed && (
-              <div
-                onClick={() => setIsSlideZoomed(true)}
-                className="relative rounded-xl overflow-hidden border border-white/15 bg-white shadow-lg cursor-zoom-in flex items-center justify-center"
-              >
-                <img
-                  src={slideImageUrl}
-                  alt="Diapositive votée"
-                  onError={() => setSlideImgFailed(true)}
-                  className="w-full max-h-[25dvh] h-auto block object-contain mx-auto"
-                />
-              </div>
-            )}
-
-            <div className="bg-slate-950/90 border border-indigo-400/30 rounded-2xl p-3.5 text-left space-y-2.5 shadow-lg">
+            <div className="bg-slate-950/90 border-2 border-indigo-400/40 rounded-2xl p-4 text-left space-y-3 shadow-lg">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
-                  Résultat du vote
+                  Résultat du vote • Diapositive {activeSlideNumber}
                 </span>
                 <span className="text-xs font-semibold text-slate-400">
                   {slideVoteStats.total} vote(s)
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
+              <p className="text-base sm:text-lg font-extrabold text-white leading-snug">
                 {slideVoteStats.question.title}
               </p>
 

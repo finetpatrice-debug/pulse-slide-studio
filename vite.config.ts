@@ -101,6 +101,7 @@ function getSupabaseAdminClient() {
 function localVoteApiPlugin(): Plugin {
   let db = loadServerDb();
   let pendingPptCommand: string | null = null;
+  let lastSbVotesSyncMs = 0;
 
   return {
     name: 'local-vote-api-middleware',
@@ -210,12 +211,14 @@ function localVoteApiPlugin(): Plugin {
               return;
             }
             if (isOpen && activeQ) {
-              if (sb) {
+              const nowMs = Date.now();
+              if (sb && nowMs - lastSbVotesSyncMs >= 2000) {
+                lastSbVotesSyncMs = nowMs;
                 void (async () => {
                   try {
                     const { data: sbVotes } = await sb
                       .from('votes')
-                      .select('*')
+                      .select('id, session_id, question_id, participant_id, answer, created_at')
                       .eq('question_id', String(activeQ.id));
                     if (Array.isArray(sbVotes)) {
                       const latestDb = loadServerDb();
@@ -364,14 +367,13 @@ function localVoteApiPlugin(): Plugin {
                 rawTitle.length > 0
                   ? rawTitle
                   : `Proposition soumise au vote — Diapositive n°${slideNum}`;
-              const slideDataUrl = readSlideDataUrl(slideNum);
               const newQ: Record<string, unknown> = {
                 id: newId,
                 session_id: String(session.id),
                 title: qTitle,
                 type: 'mcq',
                 options: ['OUI', 'NON', 'ABSTENTION'],
-                correct_option: slideDataUrl,
+                correct_option: null,
                 slide_number: slideNum,
                 is_open: true,
                 order_index: (db.questions || []).length + 1,
