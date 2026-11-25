@@ -525,7 +525,9 @@ export const pollService = {
   async getParticipantById(participantId: string): Promise<Participant | null> {
     if (!isSupabaseConfigured) {
       const db = await readLocalDb();
-      return db.participants.find((p) => p.id === participantId) ?? null;
+      const found = db.participants.find((p) => p.id === participantId) ?? null;
+      if (found && this.extractParticipantPin(found) === '0000') return null;
+      return found;
     }
 
     const { data, error } = await supabase
@@ -534,12 +536,25 @@ export const pollService = {
       .eq('id', participantId)
       .maybeSingle();
 
-    if (error) return null;
-    return (data as Participant) ?? null;
+    if (error || !data) return null;
+    const p = data as Participant;
+    if (this.extractParticipantPin(p) === '0000') return null;
+    return p;
   },
 
   extractParticipantBaseName(nickname: string): string {
-    return (nickname || '').replace(/\s*#\d{4}\s*$/, '').trim();
+    return (nickname || '')
+      .replace(/\s*<[^>]+>\s*/g, ' ')
+      .replace(/\s*#\d{4}\s*$/, '')
+      .trim();
+  },
+
+  extractParticipantEmail(nickname: string): string {
+    const m = (nickname || '').match(/<([^>]+@[^>]+)>/);
+    if (m) return m[1].toLowerCase().trim();
+    const raw = (nickname || '').replace(/\s*#\d{4}\s*$/, '').trim();
+    if (raw.includes('@')) return raw.toLowerCase();
+    return '';
   },
 
   extractParticipantPin(participant: Participant): string {
@@ -561,76 +576,88 @@ export const pollService = {
     pinCode?: string | null
   ): Promise<Participant> {
     const rawInput = nickname.trim();
-    if (!rawInput) throw new Error('Veuillez saisir votre nom ou votre code à 4 chiffres.');
+    if (!rawInput) {
+      throw new Error('Veuillez saisir votre adresse e-mail officielle ou votre code à 4 chiffres.');
+    }
 
     const allParticipants = await this.getParticipantsBySession(sessionId);
 
     // 1. Si l'utilisateur saisit directement son code à 4 chiffres dans le champ principal
     if (/^\d{4}$/.test(rawInput)) {
+      if (rawInput === '0000') {
+        throw new Error('Veuillez saisir votre adresse e-mail officielle pour obtenir votre code à 4 chiffres.');
+      }
       const byDirectPin = allParticipants.find((p) => this.extractParticipantPin(p) === rawInput);
       if (!byDirectPin) {
-        throw new Error(`Aucun votant inscrit avec le code #${rawInput}. Saisissez votre Nom et Prénom.`);
+        throw new Error(`Aucun votant actif avec le code #${rawInput}. Saisissez votre adresse e-mail officielle.`);
       }
       return byDirectPin;
     }
 
-    const cleanName = this.extractParticipantBaseName(rawInput);
-    const normalizedTarget = cleanName.toLowerCase().replace(/\s+/g, ' ');
+    if (!rawInput.includes('@')) {
+      throw new Error('Veuillez saisir votre adresse e-mail complète (ex: nom@domaine.be) ou votre code à 4 chiffres.');
+    }
+
+    const normalizedEmail = rawInput.toLowerCase().trim();
     const cleanPin = (pinCode || '').trim();
 
-    // 2. Chercher si ce nom est déjà inscrit dans cette séance
-    const existingByName = allParticipants.find(
-      (p) =>
-        this.extractParticipantBaseName(p.nickname).toLowerCase().replace(/\s+/g, ' ') ===
-        normalizedTarget
+    // 2. Chercher si cette adresse e-mail figure dans la liste officielle pré-enregistrée
+    const existingByEmail = allParticipants.find(
+      (p) => this.extractParticipantEmail(p.nickname) === normalizedEmail
     );
 
-    if (existingByName) {
-      const expectedPin = this.extractParticipantPin(existingByName);
-      if (existingParticipantId && existingParticipantId === existingByName.id && !cleanPin) {
-        return existingByName;
-      }
-      if (!cleanPin) {
-        throw new Error('PIN_REQUIRED');
-      }
-      if (cleanPin !== expectedPin) {
-        throw new Error('Code à 4 chiffres incorrect pour ce nom.');
-      }
-      return existingByName;
+    if (!existingByEmail) {
+      throw new Error(
+        "Cette adresse e-mail ne figure pas dans la liste officielle des votants autorisés. Demandez à l'organisateur de l'ajouter via le bouton « + Ajouter E-mail » dans PowerPoint."
+      );
     }
 
-    // 3. Nouveau participant : générer un code unique à 4 chiffres pour cette séance
-    const usedPins = new Set(allParticipants.map((p) => this.extractParticipantPin(p)));
-    let newPin = String(Math.floor(1000 + Math.random() * 9000));
-    while (usedPins.has(newPin)) {
-      newPin = String(Math.floor(1000 + Math.random() * 9000));
+    const currentPin = this.extractParticipantPin(existingByEmail);
+
+    // 2A. 1re connexion de cette adresse e-mail (#0000 -> attribution d'un code personnel à 4 chiffres et verrouillage)
+    if (currentPin === '0000') {
+      const usedPins = new Set(allParticipants.map((p) => this.extractParticipantPin(p)));
+      usedPins.add('0000');
+      let newPin = String(Math.floor(1000 + Math.random() * 9000));
+      while (usedPins.has(newPin)) {
+        newPin = String(Math.floor(1000 + Math.random() * 9000));
+      }
+      const baseName = this.extractParticipantBaseName(existingByEmail.nickname) || normalizedEmail.split('@')[0];
+      const updatedNickname = `${baseName} <${normalizedEmail}> #${newPin}`;
+
+      if (!isSupabaseConfigured) {
+        const db = await readLocalDb();
+        const idx = db.participants.findIndex((p) => p.id === existingByEmail.id);
+        if (idx !== -1) {
+          db.participants[idx].nickname = updatedNickname;
+          await writeLocalDb(db, sessionId);
+          return db.participants[idx];
+        }
+        return { ...existingByEmail, nickname: updatedNickname };
+      }
+
+      const { data, error } = await supabase
+        .from('participants')
+        .update({ nickname: updatedNickname })
+        .eq('id', existingByEmail.id)
+        .select('*')
+        .single();
+
+      if (error) throw new Error(`Erreur d'activation de l'e-mail : ${error.message}`);
+      return data as Participant;
     }
-    const nicknameWithPin = `${cleanName} #${newPin}`;
 
-    if (!isSupabaseConfigured) {
-      const db = await readLocalDb();
-      const participant: Participant = {
-        id: generateUUID(),
-        session_id: sessionId,
-        nickname: nicknameWithPin,
-        created_at: new Date().toISOString(),
-      };
-      db.participants.push(participant);
-      await writeLocalDb(db, sessionId);
-      return participant;
+    // 2B. Adresse e-mail déjà activée : exiger le code personnel à 4 chiffres
+    if (existingParticipantId && existingParticipantId === existingByEmail.id && !cleanPin) {
+      return existingByEmail;
     }
-
-    const { data, error } = await supabase
-      .from('participants')
-      .insert({
-        session_id: sessionId,
-        nickname: nicknameWithPin,
-      })
-      .select('*')
-      .single();
-
-    if (error) throw new Error(`Erreur d'inscription : ${error.message}`);
-    return data as Participant;
+    if (!cleanPin) {
+      throw new Error('PIN_REQUIRED');
+    }
+    if (cleanPin !== currentPin) {
+      throw new Error('Code personnel à 4 chiffres incorrect pour cette adresse e-mail.');
+    }
+    return existingByEmail;
   },
 
   async clearSessionParticipants(sessionId: string): Promise<void> {
@@ -650,6 +677,25 @@ export const pollService = {
   // --------------------------------------------------------------------------
   // VOTES (Garantie : 1 seul vote unique et définitif par participant et par scrutin)
   // --------------------------------------------------------------------------
+  async getVotesByQuestion(questionId: string): Promise<Vote[]> {
+    if (!isSupabaseConfigured) {
+      const db = await readLocalDb();
+      return db.votes
+        .filter((v) => v.question_id === questionId)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    }
+
+    const { data, error } = await supabase
+      .from('votes')
+      .select('id, session_id, question_id, participant_id, answer, created_at')
+      .eq('question_id', questionId)
+      .order('created_at', { ascending: true })
+      .limit(2000);
+
+    if (error) throw new Error(`Erreur chargement votes : ${error.message}`);
+    return (data as Vote[]) ?? [];
+  },
+
   async getVotesBySession(sessionId: string): Promise<Vote[]> {
     if (!isSupabaseConfigured) {
       const db = await readLocalDb();
@@ -658,14 +704,22 @@ export const pollService = {
         .sort((a, b) => a.created_at.localeCompare(b.created_at));
     }
 
-    const { data, error } = await supabase
-      .from('votes')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true });
+    const allRows: Vote[] = [];
+    const pageSize = 1000;
+    for (let offset = 0; offset < 15000; offset += pageSize) {
+      const { data, error } = await supabase
+        .from('votes')
+        .select('id, session_id, question_id, participant_id, answer, created_at')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+        .range(offset, offset + pageSize - 1);
 
-    if (error) throw new Error(`Erreur chargement votes : ${error.message}`);
-    return (data as Vote[]) ?? [];
+      if (error) throw new Error(`Erreur chargement votes : ${error.message}`);
+      const chunk = (data as Vote[]) ?? [];
+      allRows.push(...chunk);
+      if (chunk.length < pageSize) break;
+    }
+    return allRows;
   },
 
   async getParticipantVoteForQuestion(
@@ -758,6 +812,12 @@ export const pollService = {
       db.votes.push(newVote);
       await writeLocalDb(db, params.session_id);
       return newVote;
+    }
+
+    // Vérifier que le participant est toujours actif dans la séance en cours (non éjecté par changement/clôture de présentation)
+    const activeVoter = await this.getParticipantById(params.participant_id);
+    if (!activeVoter) {
+      throw new Error('SESSION_EXPIRED');
     }
 
     // Verrouillage strict côté Supabase : si un vote existe déjà pour ce participant sur cette question, il est immuable
@@ -861,117 +921,52 @@ export const pollService = {
     }
 
     let lastSeenState = '';
-    let lastVotesFetchMs = 0;
+    let lastKnownTitle = '';
 
-    const channel = supabase
-      .channel(`session-live-${sessionId}-${Math.random().toString(36).slice(2, 7)}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sessions',
-          filter: `id=eq.${sessionId}`,
-        },
-        async (payload) => {
-          const updated = payload.new as Session | undefined;
-          if (updated) {
-            lastSeenState = `${updated.active_question_id || ''}|${Boolean(updated.show_results)}|${updated.current_slide || 1}`;
-            if (callbacks.onSessionUpdate) {
-              callbacks.onSessionUpdate(updated);
-            }
+    const checkSessionState = async () => {
+      try {
+        const s = await this.getSessionById(sessionId);
+        if (!s) return;
+        const nextState = `${s.title || ''}|${s.active_question_id || ''}|${Boolean(s.show_results)}|${s.current_slide || 1}`;
+        if (nextState !== lastSeenState) {
+          const titleChanged = lastKnownTitle !== '' && (s.title || '') !== lastKnownTitle;
+          lastSeenState = nextState;
+          lastKnownTitle = s.title || '';
+
+          if (callbacks.onSessionUpdate) {
+            callbacks.onSessionUpdate(s);
           }
           if (callbacks.onQuestionsChange) {
-            const list = await this.getQuestionsBySession(sessionId);
-            callbacks.onQuestionsChange(list);
+            const q = await this.getQuestionsBySession(sessionId);
+            callbacks.onQuestionsChange(q);
           }
-          if (updated?.show_results && callbacks.onVotesChange) {
-            const v = await this.getVotesBySession(sessionId);
+          if (s.show_results && callbacks.onVotesChange) {
+            const v = s.active_question_id
+              ? await this.getVotesByQuestion(s.active_question_id)
+              : await this.getVotesBySession(sessionId);
             callbacks.onVotesChange(v);
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'questions',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        async () => {
-          if (callbacks.onQuestionsChange) {
-            const list = await this.getQuestionsBySession(sessionId);
-            callbacks.onQuestionsChange(list);
+          if (titleChanged && callbacks.onParticipantsChange) {
+            const p = await this.getParticipantsBySession(sessionId);
+            callbacks.onParticipantsChange(p);
           }
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'participants',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        async () => {
-          if (callbacks.onParticipantsChange) {
-            const list = await this.getParticipantsBySession(sessionId);
-            callbacks.onParticipantsChange(list);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'votes',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        async () => {
-          const now = Date.now();
-          if (callbacks.onVotesChange && now - lastVotesFetchMs >= 2000) {
-            lastVotesFetchMs = now;
-            const list = await this.getVotesBySession(sessionId);
-            callbacks.onVotesChange(list);
-          }
-        }
-      )
-      .subscribe();
+      } catch {
+        // Ignorer erreurs réseau temporaires sur GSM
+      }
+    };
 
     const sbPollTimer =
       typeof window !== 'undefined'
-        ? window.setInterval(async () => {
-            try {
-              const s = await this.getSessionById(sessionId);
-              if (!s) return;
-              const nextState = `${s.active_question_id || ''}|${Boolean(s.show_results)}|${s.current_slide || 1}`;
-              if (nextState !== lastSeenState) {
-                lastSeenState = nextState;
-                if (callbacks.onSessionUpdate) {
-                  callbacks.onSessionUpdate(s);
-                }
-                if (callbacks.onQuestionsChange) {
-                  const q = await this.getQuestionsBySession(sessionId);
-                  callbacks.onQuestionsChange(q);
-                }
-                if (s.show_results && callbacks.onVotesChange) {
-                  const v = await this.getVotesBySession(sessionId);
-                  callbacks.onVotesChange(v);
-                }
-              }
-            } catch {
-              // Ignorer erreurs réseau temporaires sur GSM
-            }
-          }, 4000)
+        ? window.setInterval(() => {
+            void checkSessionState();
+          }, 2500)
         : null;
 
     return () => {
       if (sbPollTimer !== null && typeof window !== 'undefined') {
         window.clearInterval(sbPollTimer);
       }
-      void supabase.removeChannel(channel);
     };
   },
 

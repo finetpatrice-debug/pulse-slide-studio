@@ -18,8 +18,8 @@ import {
 import { pollService } from '../services/pollService';
 import type { Session, Question, Participant, Vote } from '../types/poll';
 
-function getParticipantStorageKey(sessionId: string): string {
-  return `pulseslide_participant_${sessionId}`;
+function getParticipantStorageKey(sessionId: string, sessionTitle?: string): string {
+  return `pulseslide_participant_${sessionId}_${(sessionTitle || '').trim()}`;
 }
 
 export default function ParticipantJoinPage() {
@@ -116,7 +116,9 @@ export default function ParticipantJoinPage() {
 
         const [sessionQuestions, initialVotes] = await Promise.all([
           pollService.getQuestionsBySession(foundSession.id),
-          pollService.getVotesBySession(foundSession.id),
+          foundSession.show_results && foundSession.active_question_id
+            ? pollService.getVotesByQuestion(foundSession.active_question_id)
+            : Promise.resolve([] as Vote[]),
         ]);
         if (!cancelled) {
           setAllQuestions(sessionQuestions);
@@ -124,7 +126,7 @@ export default function ParticipantJoinPage() {
         }
 
         const savedParticipantId = localStorage.getItem(
-          getParticipantStorageKey(foundSession.id)
+          getParticipantStorageKey(foundSession.id, foundSession.title)
         );
         if (savedParticipantId) {
           const existingParticipant = await pollService.getParticipantById(savedParticipantId);
@@ -136,8 +138,10 @@ export default function ParticipantJoinPage() {
             setParticipant(existingParticipant);
             setNicknameInput(existingParticipant.nickname);
           } else {
-            localStorage.removeItem(getParticipantStorageKey(foundSession.id));
+            localStorage.removeItem(getParticipantStorageKey(foundSession.id, foundSession.title));
           }
+        } else {
+          setParticipant(null);
         }
       } catch (err) {
         if (!cancelled) {
@@ -158,12 +162,19 @@ export default function ParticipantJoinPage() {
   useEffect(() => {
     if (!session?.id) return;
 
-    const verifyParticipantStillExists = async () => {
-      const savedId = localStorage.getItem(getParticipantStorageKey(session.id));
-      if (!savedId) return;
+    const verifyParticipantForSession = async (targetSession: Session) => {
+      const key = getParticipantStorageKey(targetSession.id, targetSession.title);
+      const savedId = localStorage.getItem(key);
+      if (!savedId) {
+        setParticipant(null);
+        setDraftChoice('');
+        setSelectedAnswer('');
+        setVoteConfirmed(false);
+        return;
+      }
       const stillThere = await pollService.getParticipantById(savedId);
       if (!stillThere) {
-        localStorage.removeItem(getParticipantStorageKey(session.id));
+        localStorage.removeItem(key);
         setParticipant(null);
         setDraftChoice('');
         setSelectedAnswer('');
@@ -174,16 +185,16 @@ export default function ParticipantJoinPage() {
     const unsubscribe = pollService.subscribeToSessionRealtime(session.id, {
       onSessionUpdate: (updatedSession) => {
         setSession(updatedSession);
-        void verifyParticipantStillExists();
+        void verifyParticipantForSession(updatedSession);
       },
       onQuestionsChange: (updatedQuestions) => {
         setAllQuestions(updatedQuestions);
-        void verifyParticipantStillExists();
       },
       onParticipantsChange: (updatedParticipants) => {
-        const savedId = localStorage.getItem(getParticipantStorageKey(session.id));
+        const key = getParticipantStorageKey(session.id, session.title);
+        const savedId = localStorage.getItem(key);
         if (savedId && !updatedParticipants.some((p) => p.id === savedId)) {
-          localStorage.removeItem(getParticipantStorageKey(session.id));
+          localStorage.removeItem(key);
           setParticipant(null);
           setDraftChoice('');
           setSelectedAnswer('');
@@ -194,7 +205,7 @@ export default function ParticipantJoinPage() {
     });
 
     return () => unsubscribe();
-  }, [session?.id]);
+  }, [session?.id, session?.title]);
 
   const activeQuestion = useMemo(() => {
     if (session?.active_question_id) {
@@ -269,6 +280,19 @@ export default function ParticipantJoinPage() {
         return;
       }
 
+      const stillValidVoter = await pollService.getParticipantById(participant.id);
+      if (cancelled) return;
+      if (!stillValidVoter) {
+        if (session) {
+          localStorage.removeItem(getParticipantStorageKey(session.id, session.title));
+        }
+        setParticipant(null);
+        setDraftChoice('');
+        setSelectedAnswer('');
+        setVoteConfirmed(false);
+        return;
+      }
+
       const existingVote = await pollService.getParticipantVoteForQuestion(
         activeQuestion.id,
         participant.id
@@ -320,13 +344,16 @@ export default function ParticipantJoinPage() {
         setSession(currentSession);
         const [qList, vList] = await Promise.all([
           pollService.getQuestionsBySession(currentSession.id),
-          pollService.getVotesBySession(currentSession.id),
+          currentSession.show_results && currentSession.active_question_id
+            ? pollService.getVotesByQuestion(currentSession.active_question_id)
+            : Promise.resolve([] as Vote[]),
         ]);
         setAllQuestions(qList);
         setSessionVotes(vList);
       }
 
-      const savedId = localStorage.getItem(getParticipantStorageKey(currentSession.id));
+      const storageKey = getParticipantStorageKey(currentSession.id, currentSession.title);
+      const savedId = localStorage.getItem(storageKey);
       const trimmedInput = nicknameInput.trim();
       const joined = await pollService.joinSession(
         currentSession.id,
@@ -341,7 +368,7 @@ export default function ParticipantJoinPage() {
       }
       setRequiresPin(false);
       setPinInput('');
-      localStorage.setItem(getParticipantStorageKey(currentSession.id), joined.id);
+      localStorage.setItem(storageKey, joined.id);
       setParticipant(joined);
 
       if (sessionCode?.toUpperCase() !== targetCode) {
@@ -351,7 +378,7 @@ export default function ParticipantJoinPage() {
       if (err instanceof Error && err.message === 'PIN_REQUIRED') {
         setRequiresPin(true);
         setError(
-          'Ce nom est déjà inscrit dans cette séance. Saisissez votre code personnel à 4 chiffres pour reprendre votre accès.'
+          'Cette adresse e-mail est déjà activée dans cette séance. Saisissez votre code personnel à 4 chiffres pour reprendre votre accès.'
         );
       } else {
         setError(err instanceof Error ? err.message : 'Impossible de rejoindre la séance.');
@@ -401,7 +428,18 @@ export default function ParticipantJoinPage() {
         savedVote,
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de l'envoi du vote.");
+      if (err instanceof Error && err.message === 'SESSION_EXPIRED') {
+        if (session) {
+          localStorage.removeItem(getParticipantStorageKey(session.id, session.title));
+        }
+        setParticipant(null);
+        setDraftChoice('');
+        setSelectedAnswer('');
+        setVoteConfirmed(false);
+        setError('Nouvelle présentation détectée : veuillez saisir votre Nom et Prénom.');
+      } else {
+        setError(err instanceof Error ? err.message : "Erreur lors de l'envoi du vote.");
+      }
     } finally {
       setSubmittingVote(false);
     }
@@ -409,7 +447,7 @@ export default function ParticipantJoinPage() {
 
   const handleLeaveParticipant = () => {
     if (session) {
-      localStorage.removeItem(getParticipantStorageKey(session.id));
+      localStorage.removeItem(getParticipantStorageKey(session.id, session.title));
     }
     setParticipant(null);
     setNicknameInput('');
@@ -477,13 +515,13 @@ export default function ParticipantJoinPage() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Votre Nom et Prénom (ou votre code à 4 chiffres)
+                Votre Adresse E-mail officielle (ou votre code à 4 chiffres)
               </label>
               <div className="relative">
                 <User className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  maxLength={40}
+                  maxLength={80}
                   value={nicknameInput}
                   onChange={(e) => {
                     setNicknameInput(e.target.value);
@@ -493,14 +531,14 @@ export default function ParticipantJoinPage() {
                       setError(null);
                     }
                   }}
-                  placeholder="Ex: Jean Dupont ou 4829"
+                  placeholder="Ex: nom.prenom@domaine.be ou 4829"
                   autoFocus
                   className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-950 border border-white/15 text-white text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
               <p className="text-xs text-slate-400 mt-1.5">
-                À votre 1re connexion, un <strong>code personnel à 4 chiffres</strong> vous sera attribué pour garantir un vote unique.
+                Seules les adresses e-mail pré-enregistrées sont autorisées. À votre 1re connexion, un <strong>code personnel à 4 chiffres</strong> vous sera attribué et verrouillera votre accès.
               </p>
             </div>
 
@@ -594,7 +632,7 @@ export default function ParticipantJoinPage() {
               {justAssignedPin}
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Ce code garantit un vote unique et vous permet de reprendre votre session si vous prêtez votre GSM à un collègue.
+              Ce code verrouille votre adresse e-mail sur cet appareil pour garantir un vote unique tout au long de la séance.
             </p>
             <button
               type="button"
@@ -672,18 +710,6 @@ export default function ParticipantJoinPage() {
                       Plein écran
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleLeaveParticipant();
-                    }}
-                    title="Prêter ce GSM / Changer de votant"
-                    className="text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded-lg border border-white/10 inline-flex items-center gap-1"
-                  >
-                    <LogOut className="w-3 h-3 text-amber-400" />
-                    Prêter
-                  </button>
                 </div>
               </div>
 
@@ -917,15 +943,6 @@ export default function ParticipantJoinPage() {
                     Plein écran
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={handleLeaveParticipant}
-                  title="Prêter ce GSM / Changer de votant"
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 font-semibold inline-flex items-center gap-1 transition"
-                >
-                  <LogOut className="w-3.5 h-3.5 text-amber-400" />
-                  Prêter GSM
-                </button>
               </div>
             </div>
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto">

@@ -28,6 +28,62 @@ interface DbShape {
 }
 
 const DB_FILE = path.resolve(process.cwd(), '.local-vote-db.json');
+const VOTERS_CSV_FILE = path.resolve(process.cwd(), 'liste-votants.csv');
+
+interface AllowedVoterEntry {
+  email: string;
+  name: string;
+}
+
+function parseVoterLine(rawLine: string): AllowedVoterEntry | null {
+  const line = rawLine.trim();
+  if (!line || line.startsWith('#')) return null;
+  const parts = line.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+  const emailPart = parts.find((p) => p.includes('@')) || parts[0];
+  const email = emailPart.toLowerCase().trim();
+  if (!email.includes('@')) return null;
+  const namePart = parts.find((p) => p !== emailPart);
+  const defaultName = email
+    .split('@')[0]
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return {
+    email,
+    name: (namePart || defaultName).trim(),
+  };
+}
+
+function loadAllowedVotersFromCsv(): AllowedVoterEntry[] {
+  try {
+    if (!fs.existsSync(VOTERS_CSV_FILE)) return [];
+    const raw = fs.readFileSync(VOTERS_CSV_FILE, 'utf-8');
+    const seen = new Set<string>();
+    const list: AllowedVoterEntry[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const parsed = parseVoterLine(line);
+      if (parsed && !seen.has(parsed.email)) {
+        seen.add(parsed.email);
+        list.push(parsed);
+      }
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+function extractEmailFromNickname(nickname: string): string {
+  const m = (nickname || '').match(/<([^>]+@[^>]+)>/);
+  if (m) return m[1].toLowerCase().trim();
+  const raw = (nickname || '').replace(/\s*#\d{4}\s*$/, '').trim();
+  if (raw.includes('@')) return raw.toLowerCase();
+  return '';
+}
+
+function formatUnclaimedNickname(entry: AllowedVoterEntry): string {
+  return `${entry.name} <${entry.email}> #0000`;
+}
 
 function loadServerDb(): DbShape {
   try {
@@ -244,28 +300,193 @@ function localVoteApiPlugin(): Plugin {
             return;
           }
 
-          if (op === 'clear_participants') {
-            db.participants = [];
-            db.votes = [];
-            db.questions = [];
-            session.active_question_id = null;
-            session.show_results = false;
+          const syncCsvVotersToSupabaseAndLocal = async (
+            resetPins: boolean,
+            newTitle?: string,
+            pruneRemoved?: boolean
+          ) => {
+            const csvVoters = loadAllowedVotersFromCsv();
+            const allowedEmailSet = new Set(csvVoters.map((v) => v.email));
+            const sessionIdStr = String(session.id);
+
+            if (newTitle) {
+              session.title = newTitle;
+              session.active_question_id = null;
+              session.show_results = false;
+              for (const q of db.questions || []) {
+                q.is_open = false;
+              }
+            }
+
+            let sbParticipants: Array<Record<string, unknown>> = [];
+            if (sb) {
+              try {
+                const { data } = await sb
+                  .from('participants')
+                  .select('*')
+                  .eq('session_id', sessionIdStr);
+                if (Array.isArray(data)) sbParticipants = data;
+              } catch {}
+            }
+
+            // Si pruneRemoved=true (remplacement de la liste par un nouveau fichier Excel/CSV), retirer les participants absents de la nouvelle liste
+            if (pruneRemoved) {
+              if (sb && sbParticipants.length > 0) {
+                const keptSb: Array<Record<string, unknown>> = [];
+                for (const p of sbParticipants) {
+                  const em = extractEmailFromNickname(String(p.nickname || ''));
+                  if (!em || !allowedEmailSet.has(em)) {
+                    try {
+                      await sb.from('votes').delete().eq('participant_id', String(p.id));
+                    } catch {}
+                    try {
+                      await sb.from('participants').delete().eq('id', String(p.id));
+                    } catch {}
+                  } else {
+                    keptSb.push(p);
+                  }
+                }
+                sbParticipants = keptSb;
+              }
+              db.participants = (db.participants || []).filter((p) => {
+                const em = extractEmailFromNickname(String(p.nickname || ''));
+                return Boolean(em && allowedEmailSet.has(em));
+              });
+            }
+
+            const existingByEmail = new Map<string, Record<string, unknown>>();
+            for (const p of sbParticipants.length > 0 ? sbParticipants : (db.participants || [])) {
+              const em = extractEmailFromNickname(String(p.nickname || ''));
+              if (em && (!pruneRemoved || allowedEmailSet.has(em))) {
+                existingByEmail.set(em, p);
+              }
+            }
+
+            // Si resetPins=true, réinitialiser à #0000 tous les profils existants (sans DELETE pour préserver l'historique des votes)
+            if (resetPins && sb) {
+              for (const p of sbParticipants) {
+                const rawNick = String(p.nickname || '');
+                const em = extractEmailFromNickname(rawNick);
+                const csvMatch = csvVoters.find((v) => v.email === em);
+                const updatedNick = csvMatch
+                  ? formatUnclaimedNickname(csvMatch)
+                  : rawNick.replace(/#\d{4}\s*$/, '#0000');
+                try {
+                  await sb.from('participants').update({ nickname: updatedNick }).eq('id', String(p.id));
+                  p.nickname = updatedNick;
+                } catch {}
+              }
+            } else if (pruneRemoved && sb) {
+              // Mettre à jour les noms des participants conservés si le fichier Excel/CSV a modifié leur nom
+              for (const p of sbParticipants) {
+                const rawNick = String(p.nickname || '');
+                const em = extractEmailFromNickname(rawNick);
+                const csvMatch = csvVoters.find((v) => v.email === em);
+                if (csvMatch) {
+                  const pinMatch = rawNick.match(/#(\d{4})\s*$/);
+                  const currentPin = pinMatch ? pinMatch[1] : '0000';
+                  const updatedNick = `${csvMatch.name} <${csvMatch.email}> #${currentPin}`;
+                  if (updatedNick !== rawNick) {
+                    try {
+                      await sb.from('participants').update({ nickname: updatedNick }).eq('id', String(p.id));
+                      p.nickname = updatedNick;
+                    } catch {}
+                  }
+                }
+              }
+            }
+
+            // Ajouter en lot (batch insert) les nouveaux e-mails du CSV qui ne sont pas encore dans la base (support instantané 300+ invités)
+            const missingEntries = csvVoters.filter((entry) => !existingByEmail.has(entry.email));
+            if (missingEntries.length > 0) {
+              if (sb) {
+                try {
+                  const rowsToInsert = missingEntries.map((entry) => ({
+                    session_id: sessionIdStr,
+                    nickname: formatUnclaimedNickname(entry),
+                  }));
+                  const { data: insertedRows } = await sb
+                    .from('participants')
+                    .insert(rowsToInsert)
+                    .select('*');
+                  if (Array.isArray(insertedRows)) {
+                    for (const row of insertedRows) {
+                      const rec = row as Record<string, unknown>;
+                      const em = extractEmailFromNickname(String(rec.nickname || ''));
+                      sbParticipants.push(rec);
+                      if (em) existingByEmail.set(em, rec);
+                    }
+                  }
+                } catch {}
+              } else {
+                for (const entry of missingEntries) {
+                  const localP = {
+                    id: crypto.randomUUID(),
+                    session_id: sessionIdStr,
+                    nickname: formatUnclaimedNickname(entry),
+                    created_at: new Date().toISOString(),
+                  };
+                  existingByEmail.set(entry.email, localP);
+                }
+              }
+            }
+
+            if (sb && newTitle) {
+              try {
+                await sb
+                  .from('questions')
+                  .update({ is_open: false })
+                  .eq('session_id', sessionIdStr);
+                await sb
+                  .from('sessions')
+                  .update({
+                    title: newTitle,
+                    active_question_id: null,
+                    show_results: false,
+                  })
+                  .eq('id', sessionIdStr);
+              } catch {}
+            }
+
+            db.participants = Array.from(existingByEmail.values());
             saveServerDb(db);
+            return csvVoters.length;
+          };
+
+          if (op === 'clear_participants') {
+            const newPresTitle = rawTitle
+              ? `${rawTitle} (${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`
+              : `Séance de Vote PowerPoint (${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`;
             res.statusCode = 200;
             res.end('CLEARED_PARTICIPANTS');
-            if (sb) {
-              void (async () => {
-                try {
-                  await sb.from('votes').delete().eq('session_id', String(session.id));
-                  await sb.from('participants').delete().eq('session_id', String(session.id));
-                  await sb.from('questions').delete().eq('session_id', String(session.id));
-                  await sb
-                    .from('sessions')
-                    .update({ active_question_id: null, show_results: false })
-                    .eq('id', String(session.id));
-                } catch {}
-              })();
+            void syncCsvVotersToSupabaseAndLocal(true, newPresTitle);
+            return;
+          }
+
+          if (op === 'reload_voters') {
+            const prune = urlObj.searchParams.get('prune') === '1';
+            const resetPins = urlObj.searchParams.get('reset') === '1';
+            const count = await syncCsvVotersToSupabaseAndLocal(resetPins, undefined, prune);
+            res.statusCode = 200;
+            res.end(`RELOADED|${count}`);
+            return;
+          }
+
+          if (op === 'add_voter') {
+            const rawEmailInput = (urlObj.searchParams.get('email') || '').trim();
+            const parsed = parseVoterLine(rawEmailInput);
+            if (!parsed) {
+              res.statusCode = 400;
+              res.end('ERR|Format e-mail invalide');
+              return;
             }
+            const currentCsv = loadAllowedVotersFromCsv();
+            if (!currentCsv.some((v) => v.email === parsed.email)) {
+              fs.appendFileSync(VOTERS_CSV_FILE, `\r\n${parsed.email};${parsed.name}`, 'utf-8');
+            }
+            await syncCsvVotersToSupabaseAndLocal(false);
+            res.statusCode = 200;
+            res.end(`ADDED|${parsed.name} (${parsed.email})`);
             return;
           }
 
@@ -274,6 +495,12 @@ function localVoteApiPlugin(): Plugin {
               let list: Array<{ nickname?: string }> = (db.participants || []).filter(
                 (p) => String(p.session_id) === String(session.id)
               );
+              if (list.length === 0) {
+                await syncCsvVotersToSupabaseAndLocal(false);
+                list = (db.participants || []).filter(
+                  (p) => String(p.session_id) === String(session.id)
+                );
+              }
               if (sb) {
                 try {
                   const { data } = await sb
@@ -296,7 +523,12 @@ function localVoteApiPlugin(): Plugin {
                 const raw = String(p.nickname || '').trim();
                 const m = raw.match(/^(.*?)\s*#(\d{4})\s*$/);
                 if (m) {
-                  return `${idx + 1}. ${m[1].trim()}   —   Code : #${m[2]}`;
+                  const label = m[1].trim();
+                  const pin = m[2];
+                  if (pin === '0000') {
+                    return `${idx + 1}. ${label}   —   [En attente de 1re connexion]`;
+                  }
+                  return `${idx + 1}. ${label}   —   CONNECTÉ (Code : #${pin})`;
                 }
                 return `${idx + 1}. ${raw}`;
               });
@@ -426,10 +658,10 @@ function localVoteApiPlugin(): Plugin {
                   const sbVotes = await Promise.race([
                     sb
                       .from('votes')
-                      .select('*')
+                      .select('id, session_id, question_id, participant_id, answer, created_at')
                       .eq('question_id', String(activeQ.id))
                       .then((r) => r.data),
-                    new Promise<null>((resolve) => setTimeout(() => resolve(null), 400)),
+                    new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
                   ]);
                   if (Array.isArray(sbVotes)) {
                     const otherVotes = (db.votes || []).filter(
