@@ -116,3 +116,8 @@ values (
   true
 )
 on conflict (code) do nothing;
+
+-- Note : L'accès optionnel Co-animateur (Secrétariat / Régie sur /regie) stocke
+-- l'empreinte SHA-256 du PIN choisi par l'animateur dans une ligne dédiée
+-- (code = 'COHOST_CFG_38NKMQ', is_active = false, title = 'sha256:...')
+-- sans aucune migration SQL supplémentaire ni image dans la base.

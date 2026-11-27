@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$dllPath = Join-Path $projectRoot "addin\VoteEnDirectAddin_v28.dll"
+$dllPath = Join-Path $projectRoot "addin\VoteEnDirectAddin_v29.dll"
 $csPath = Join-Path $projectRoot "addin\VoteEnDirectAddin.cs"
 $cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
@@ -32,7 +32,7 @@ New-Item -Path $inproc -Force | Out-Null
 Set-ItemProperty -Path $inproc -Name "(Default)" -Value "mscoree.dll"
 Set-ItemProperty -Path $inproc -Name "ThreadingModel" -Value "Both"
 Set-ItemProperty -Path $inproc -Name "Class" -Value $className
-Set-ItemProperty -Path $inproc -Name "Assembly" -Value "VoteEnDirectAddin_v28, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
+Set-ItemProperty -Path $inproc -Name "Assembly" -Value "VoteEnDirectAddin_v29, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
 Set-ItemProperty -Path $inproc -Name "RuntimeVersion" -Value "v4.0.30319"
 Set-ItemProperty -Path $inproc -Name "CodeBase" -Value $codeBaseUri
 

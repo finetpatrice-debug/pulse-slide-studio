@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getCohostConfigCode, isCohostConfigSessionCode } from '../utils/cohostPin';
 import type {
   Session,
   Question,
@@ -223,17 +224,236 @@ export const pollService = {
   async listRecentSessions(limit = 10): Promise<Session[]> {
     if (!isSupabaseConfigured) {
       const db = await readLocalDb();
-      return db.sessions.slice(0, limit);
+      return db.sessions
+        .filter((s) => !isCohostConfigSessionCode(s.code))
+        .slice(0, limit);
     }
 
     const { data, error } = await supabase
       .from('sessions')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(limit + 5);
 
     if (error) throw new Error(`Erreur liste des sessions : ${error.message}`);
-    return (data as Session[]) ?? [];
+    return ((data as Session[]) ?? [])
+      .filter((s) => !isCohostConfigSessionCode(s.code))
+      .slice(0, limit);
+  },
+
+  // --------------------------------------------------------------------------
+  // CO-ANIMATEUR (SECRÉTARIAT / RÉGIE) — LECTURE LÉGÈRE & ACTIONS CIBLÉES
+  // --------------------------------------------------------------------------
+  async getCohostPinHash(sessionCode: string): Promise<string | null> {
+    const cfgCode = getCohostConfigCode(sessionCode);
+    if (!isSupabaseConfigured) {
+      const db = await readLocalDb();
+      const row = db.sessions.find((s) => String(s.code || '').toUpperCase() === cfgCode);
+      const val = String(row?.title || '').trim();
+      return val.startsWith('sha256:') ? val : null;
+    }
+
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('title')
+      .eq('code', cfgCode)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    const val = String((data as { title?: string }).title || '').trim();
+    return val.startsWith('sha256:') ? val : null;
+  },
+
+  async getSessionLightweightState(sessionId: string): Promise<Session | null> {
+    if (!isSupabaseConfigured) {
+      return this.getSessionById(sessionId);
+    }
+
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('id, code, title, current_slide, active_question_id, show_results, reveal_answer, is_active, created_at')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data as Session;
+  },
+
+  async getQuestionVoteCountHead(questionId: string): Promise<number> {
+    if (!isSupabaseConfigured) {
+      const db = await readLocalDb();
+      return db.votes.filter((v) => v.question_id === questionId).length;
+    }
+
+    const { count, error } = await supabase
+      .from('votes')
+      .select('id', { count: 'exact', head: true })
+      .eq('question_id', questionId);
+
+    if (error) return 0;
+    return count ?? 0;
+  },
+
+  async addParticipantFromRegie(
+    sessionId: string,
+    rawEmail: string,
+    rawName?: string
+  ): Promise<Participant> {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      throw new Error('Veuillez saisir une adresse e-mail valide (ex: prenom.nom@domaine.be).');
+    }
+
+    const existing = await this.getParticipantsBySession(sessionId);
+    const dup = existing.find((p) => this.extractParticipantEmail(p.nickname) === email);
+    if (dup) {
+      throw new Error(`L'adresse ${email} figure déjà dans la liste des inscrits.`);
+    }
+
+    const defaultName = email
+      .split('@')[0]
+      .replace(/[._-]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+    const displayName = (rawName || '').trim() || defaultName || email;
+    const nickname = `${displayName} <${email}> #0000`;
+
+    if (!isSupabaseConfigured) {
+      const db = await readLocalDb();
+      const created: Participant = {
+        id: generateUUID(),
+        session_id: sessionId,
+        nickname,
+        created_at: new Date().toISOString(),
+      };
+      db.participants.push(created);
+      await writeLocalDb(db, sessionId);
+      return created;
+    }
+
+    const { data, error } = await supabase
+      .from('participants')
+      .insert({
+        session_id: sessionId,
+        nickname,
+      })
+      .select('id, session_id, nickname, created_at')
+      .single();
+
+    if (error) throw new Error(`Erreur lors de l'ajout du participant : ${error.message}`);
+    return data as Participant;
+  },
+
+  async unlockSingleParticipantPin(participant: Participant): Promise<Participant> {
+    const email = this.extractParticipantEmail(participant.nickname);
+    const baseName = this.extractParticipantBaseName(participant.nickname);
+    const updatedNickname = email
+      ? `${baseName || email.split('@')[0]} <${email}> #0000`
+      : `${(participant.nickname || '').replace(/\s*#\d{4}\s*$/, '').trim()} #0000`;
+
+    if (!isSupabaseConfigured) {
+      const db = await readLocalDb();
+      const idx = db.participants.findIndex((p) => p.id === participant.id);
+      if (idx !== -1) {
+        db.participants[idx].nickname = updatedNickname;
+        await writeLocalDb(db, participant.session_id);
+        return db.participants[idx];
+      }
+      return { ...participant, nickname: updatedNickname };
+    }
+
+    const { data, error } = await supabase
+      .from('participants')
+      .update({ nickname: updatedNickname })
+      .eq('id', participant.id)
+      .select('id, session_id, nickname, created_at')
+      .single();
+
+    if (error) throw new Error(`Erreur lors du déblocage : ${error.message}`);
+    return data as Participant;
+  },
+
+  exportRegieSummaryPvCsv(
+    session: Session,
+    questions: Question[],
+    votes: Vote[]
+  ): void {
+    const realQuestions = questions.filter((q) => q.title !== '__SLIDE_PREVIEW__');
+    const escapeCsv = (val: string | number | null | undefined): string => {
+      const str = val === null || val === undefined ? '' : String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const headers = [
+      'N°',
+      'Diapositive',
+      'Proposition soumise au vote',
+      'OUI (voix)',
+      'OUI (%)',
+      'NON (voix)',
+      'NON (%)',
+      'ABSTENTION (voix)',
+      'ABSTENTION (%)',
+      'Total votes',
+      'Verdict',
+      'Horodatage',
+    ];
+
+    const rows: string[] = [headers.map(escapeCsv).join(';')];
+    realQuestions.forEach((q, idx) => {
+      const qVotes = votes.filter((v) => v.question_id === q.id);
+      let oui = 0;
+      let non = 0;
+      let abst = 0;
+      for (const v of qVotes) {
+        const ans = String(v.answer || '').trim().toUpperCase();
+        if (ans === 'OUI') oui++;
+        else if (ans === 'NON') non++;
+        else abst++;
+      }
+      const total = qVotes.length;
+      const ouiPct = total > 0 ? Math.round((oui / total) * 100) : 0;
+      const nonPct = total > 0 ? Math.round((non / total) * 100) : 0;
+      const abstPct = total > 0 ? Math.round((abst / total) * 100) : 0;
+      let verdict = 'SANS VOTE';
+      if (total > 0) {
+        if (oui > non) verdict = 'ADOPTÉE';
+        else if (non > oui) verdict = 'REJETÉE';
+        else verdict = 'ÉGALITÉ';
+      }
+      rows.push(
+        [
+          idx + 1,
+          q.slide_number ?? '-',
+          q.title,
+          oui,
+          `${ouiPct} %`,
+          non,
+          `${nonPct} %`,
+          abst,
+          `${abstPct} %`,
+          total,
+          verdict,
+          new Date(q.created_at).toLocaleString('fr-FR'),
+        ]
+          .map(escapeCsv)
+          .join(';')
+      );
+    });
+
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `PV_Synthese_${session.code}_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 
   async updateSessionState(

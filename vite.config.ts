@@ -29,6 +29,17 @@ interface DbShape {
 
 const DB_FILE = path.resolve(process.cwd(), '.local-vote-db.json');
 const VOTERS_CSV_FILE = path.resolve(process.cwd(), 'liste-votants.csv');
+const PUBLIC_REGIE_URL = 'https://finetpatrice-debug.github.io/pulse-slide-studio/regie';
+const COHOST_CONFIG_PREFIX = 'COHOST_CFG_';
+
+function hashCohostPinServer(sessionCode: string, pin: string): string {
+  const normalizedCode = (sessionCode || '38NKMQ').trim().toUpperCase();
+  const digest = crypto
+    .createHash('sha256')
+    .update(`pulseslide-regie-v1|${normalizedCode}|${pin.trim()}`, 'utf8')
+    .digest('hex');
+  return `sha256:${digest}`;
+}
 
 interface AllowedVoterEntry {
   email: string;
@@ -329,6 +340,41 @@ function localVoteApiPlugin(): Plugin {
               } catch {}
             }
 
+            // Fusion non destructive : intégrer dans liste-votants.csv les retardataires ajoutés depuis /regie dans Supabase
+            if (!pruneRemoved && sbParticipants.length > 0) {
+              const newFromSupabase: AllowedVoterEntry[] = [];
+              for (const p of sbParticipants) {
+                const rawNick = String(p.nickname || '');
+                const em = extractEmailFromNickname(rawNick);
+                if (em && !allowedEmailSet.has(em)) {
+                  allowedEmailSet.add(em);
+                  const cleanName =
+                    rawNick
+                      .replace(/\s*<[^>]+>\s*/g, ' ')
+                      .replace(/\s*#\d{4}\s*$/, '')
+                      .trim() || em.split('@')[0];
+                  const entry = { email: em, name: cleanName };
+                  csvVoters.push(entry);
+                  newFromSupabase.push(entry);
+                }
+              }
+              if (newFromSupabase.length > 0) {
+                try {
+                  if (!fs.existsSync(VOTERS_CSV_FILE)) {
+                    fs.writeFileSync(
+                      VOTERS_CSV_FILE,
+                      '# Liste officielle des votants autorisés (Format: email;Nom Prénom)\r\n',
+                      'utf-8'
+                    );
+                  }
+                  const linesToAppend = newFromSupabase
+                    .map((v) => `\r\n${v.email};${v.name}`)
+                    .join('');
+                  fs.appendFileSync(VOTERS_CSV_FILE, linesToAppend, 'utf-8');
+                } catch {}
+              }
+            }
+
             // Si pruneRemoved=true (remplacement de la liste par un nouveau fichier Excel/CSV), retirer les participants absents de la nouvelle liste
             if (pruneRemoved) {
               if (sb && sbParticipants.length > 0) {
@@ -537,6 +583,129 @@ function localVoteApiPlugin(): Plugin {
             const deletedCount = Math.max(prevCsvCount, prevLocalCount, prevSbCount);
             res.statusCode = 200;
             res.end(`PURGED|${deletedCount}`);
+            return;
+          }
+
+          if (op === 'get_cohost_status') {
+            const sCode = String(session.code || '38NKMQ').trim().toUpperCase();
+            const cfgCode = `${COHOST_CONFIG_PREFIX}${sCode}`;
+            let pinHash: string | null = null;
+            if (sb) {
+              try {
+                const { data } = await sb
+                  .from('sessions')
+                  .select('title')
+                  .eq('code', cfgCode)
+                  .maybeSingle();
+                const t = String((data as { title?: string } | null)?.title || '').trim();
+                if (t.startsWith('sha256:')) pinHash = t;
+              } catch {}
+            }
+            if (!pinHash) {
+              const localCfg = (db.sessions || []).find(
+                (s) => String(s.code || '').toUpperCase() === cfgCode
+              );
+              const t = String(localCfg?.title || '').trim();
+              if (t.startsWith('sha256:')) pinHash = t;
+            }
+            res.statusCode = 200;
+            res.end(`${pinHash ? 'CONFIGURED' : 'UNSET'}|${PUBLIC_REGIE_URL}`);
+            return;
+          }
+
+          if (op === 'set_cohost_pin') {
+            const sCode = String(session.code || '38NKMQ').trim().toUpperCase();
+            const cfgCode = `${COHOST_CONFIG_PREFIX}${sCode}`;
+            const disable = urlObj.searchParams.get('disable') === '1';
+            const rawPin = (urlObj.searchParams.get('pin') || '').trim();
+
+            if (disable) {
+              if (sb) {
+                const { error: delErr } = await sb.from('sessions').delete().eq('code', cfgCode);
+                if (delErr) {
+                  res.statusCode = 500;
+                  res.end('ERR|Supabase disable PIN: ' + delErr.message);
+                  return;
+                }
+              }
+              db.sessions = (db.sessions || []).filter(
+                (s) => String(s.code || '').toUpperCase() !== cfgCode
+              );
+              saveServerDb(db);
+              res.statusCode = 200;
+              res.end(`DISABLED|${PUBLIC_REGIE_URL}`);
+              return;
+            }
+
+            if (rawPin.length < 4) {
+              res.statusCode = 400;
+              res.end('ERR|Le PIN doit contenir au moins 4 caractères.');
+              return;
+            }
+
+            const hashed = hashCohostPinServer(sCode, rawPin);
+            if (sb) {
+              const { data: existingCfg, error: selErr } = await sb
+                .from('sessions')
+                .select('id')
+                .eq('code', cfgCode)
+                .maybeSingle();
+              if (selErr) {
+                res.statusCode = 500;
+                res.end('ERR|Supabase lecture config PIN: ' + selErr.message);
+                return;
+              }
+              if (existingCfg && (existingCfg as { id?: string }).id) {
+                const { error: updErr } = await sb
+                  .from('sessions')
+                  .update({ title: hashed, is_active: false })
+                  .eq('id', String((existingCfg as { id?: string }).id));
+                if (updErr) {
+                  res.statusCode = 500;
+                  res.end('ERR|Supabase mise à jour PIN: ' + updErr.message);
+                  return;
+                }
+              } else {
+                const { error: insErr } = await sb.from('sessions').insert({
+                  code: cfgCode,
+                  title: hashed,
+                  current_slide: 1,
+                  active_question_id: null,
+                  show_results: false,
+                  reveal_answer: false,
+                  is_active: false,
+                });
+                if (insErr) {
+                  res.statusCode = 500;
+                  res.end('ERR|Supabase création PIN: ' + insErr.message);
+                  return;
+                }
+              }
+            }
+
+            const localIdx = (db.sessions || []).findIndex(
+              (s) => String(s.code || '').toUpperCase() === cfgCode
+            );
+            if (localIdx !== -1) {
+              db.sessions[localIdx].title = hashed;
+              db.sessions[localIdx].is_active = false;
+            } else {
+              db.sessions.push({
+                id: crypto.randomUUID(),
+                code: cfgCode,
+                title: hashed,
+                current_slide: 1,
+                active_question_id: null,
+                show_results: false,
+                reveal_answer: false,
+                is_active: false,
+                created_at: new Date().toISOString(),
+              });
+            }
+            saveServerDb(db);
+
+            res.statusCode = 200;
+            res.end(`PIN_SAVED|${PUBLIC_REGIE_URL}`);
             return;
           }
 

@@ -153,7 +153,7 @@ namespace VoteEnDirect
         public void OnConnection(object Application, int ConnectMode, object AddInInst, ref Array custom)
         {
             _pptApp = Application;
-            Log("OnConnection called (v28)");
+            Log("OnConnection called (v29)");
             DisableHeavyThirdPartyAddins();
             EnsureViteServerRunning();
             StartInProcessPollingTimer();
@@ -1728,6 +1728,15 @@ namespace VoteEnDirect
                   supertip=""Ouvre le tableau récapitulatif de tous les textes votés (ADOPTÉ / REJETÉ) et télécharge le fichier CSV.""
                   onAction=""OnClickHistory"" />
         </group>
+        <group id=""GrpRegie"" label=""4. Co-animation (Optionnel)"">
+          <button id=""BtnCohostAccess""
+                  label=""Accès Régie (QR &amp; PIN)""
+                  size=""large""
+                  imageMso=""AddressBook""
+                  screentip=""Afficher le QR Code, le lien simplifié (/regie) et définir votre code PIN Co-animateur""
+                  supertip=""Fenêtre privée sur votre PC pour partager l'accès Secrétariat / Régie à une 2e personne (inscrits, codes, déblocage individuel, suivi, PV) et choisir votre PIN pour cette AG.""
+                  onAction=""OnClickCohostAccess"" />
+        </group>
       </tab>
     </tabs>
   </ribbon>
@@ -2748,6 +2757,256 @@ namespace VoteEnDirect
         public void OnClickHistory(object control)
         {
             OpenOverlayAction("pptAction=history");
+        }
+
+        public void OnClickCohostAccess(object control)
+        {
+            try
+            {
+                EnsureViteServerRunning();
+                string statusResp = CallLocalApi("/api/ppt-action?op=get_cohost_status", 6000);
+                if (string.IsNullOrEmpty(statusResp))
+                {
+                    Thread.Sleep(1500);
+                    statusResp = CallLocalApi("/api/ppt-action?op=get_cohost_status", 6000);
+                }
+
+                bool isConfigured = statusResp.StartsWith("CONFIGURED|");
+                string regieUrl = "https://finetpatrice-debug.github.io/pulse-slide-studio/regie";
+                if (statusResp.Contains("|"))
+                {
+                    string[] parts = statusResp.Split('|');
+                    if (parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        regieUrl = parts[1].Trim();
+                    }
+                }
+
+                Form dlg = new Form()
+                {
+                    Width = 540,
+                    Height = 610,
+                    FormBorderStyle = FormBorderStyle.FixedDialog,
+                    Text = "Vote en Direct — Accès Co-animateur (Secrétariat / Régie)",
+                    StartPosition = FormStartPosition.CenterScreen,
+                    MaximizeBox = false,
+                    MinimizeBox = false,
+                    TopMost = true,
+                    Font = new Font("Segoe UI", 9.5F, FontStyle.Regular)
+                };
+
+                Label lblIntro = new Label()
+                {
+                    Left = 18,
+                    Top = 14,
+                    Width = 490,
+                    Height = 38,
+                    Text = "Accès optionnel Secrétariat / Régie (recherche des codes, retardataires, déblocage individuel #0000, suivi du scrutin et export PV CSV). Privé — jamais projeté.",
+                    ForeColor = Color.FromArgb(51, 65, 85)
+                };
+
+                PictureBox picQr = new PictureBox()
+                {
+                    Left = 155,
+                    Top = 58,
+                    Width = 215,
+                    Height = 215,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    BackColor = Color.White
+                };
+                string qrRegiePath = Path.Combine(_projectRoot, "public", "slides", "qr-regie.png");
+                if (File.Exists(qrRegiePath))
+                {
+                    try
+                    {
+                        byte[] imgBytes = File.ReadAllBytes(qrRegiePath);
+                        MemoryStream ms = new MemoryStream(imgBytes);
+                        picQr.Image = Image.FromStream(ms);
+                    }
+                    catch { }
+                }
+
+                Label lblUrlTitle = new Label()
+                {
+                    Left = 18,
+                    Top = 284,
+                    Width = 490,
+                    Height = 20,
+                    Text = "Lien simplifié à scanner ou envoyer au co-animateur :",
+                    Font = new Font("Segoe UI", 9.5F, FontStyle.Bold)
+                };
+
+                TextBox txtUrl = new TextBox()
+                {
+                    Left = 18,
+                    Top = 307,
+                    Width = 372,
+                    Height = 26,
+                    ReadOnly = true,
+                    Text = regieUrl,
+                    Font = new Font("Consolas", 9.5F, FontStyle.Regular),
+                    BackColor = Color.White
+                };
+
+                Button btnCopyUrl = new Button()
+                {
+                    Left = 398,
+                    Top = 305,
+                    Width = 110,
+                    Height = 28,
+                    Text = "Copier le lien"
+                };
+                btnCopyUrl.Click += (s, e) =>
+                {
+                    try
+                    {
+                        Clipboard.SetText(regieUrl);
+                        btnCopyUrl.Text = "Copié ✓";
+                    }
+                    catch { }
+                };
+
+                Label lblPinStatus = new Label()
+                {
+                    Left = 18,
+                    Top = 350,
+                    Width = 490,
+                    Height = 24,
+                    Font = new Font("Segoe UI", 10F, FontStyle.Bold)
+                };
+
+                Action<bool> updateStatusUi = (configured) =>
+                {
+                    if (configured)
+                    {
+                        lblPinStatus.Text = "Statut actuel : PIN Co-animateur CONFIGURÉ (accès /regie actif)";
+                        lblPinStatus.ForeColor = Color.FromArgb(21, 128, 61);
+                    }
+                    else
+                    {
+                        lblPinStatus.Text = "Statut actuel : Accès Régie DÉSACTIVÉ (aucun PIN défini)";
+                        lblPinStatus.ForeColor = Color.FromArgb(180, 83, 9);
+                    }
+                };
+                updateStatusUi(isConfigured);
+
+                Label lblPinPrompt = new Label()
+                {
+                    Left = 18,
+                    Top = 382,
+                    Width = 490,
+                    Height = 36,
+                    Text = "Choisissez votre code PIN fixe pour cette AG (min. 4 caractères — modifiable librement avant chaque assemblée) :"
+                };
+
+                TextBox txtPin = new TextBox()
+                {
+                    Left = 18,
+                    Top = 422,
+                    Width = 240,
+                    Height = 28,
+                    Font = new Font("Consolas", 12F, FontStyle.Bold)
+                };
+
+                Button btnSavePin = new Button()
+                {
+                    Left = 268,
+                    Top = 420,
+                    Width = 240,
+                    Height = 32,
+                    Text = "Enregistrer / Changer ce PIN",
+                    Font = new Font("Segoe UI", 9.5F, FontStyle.Bold)
+                };
+                btnSavePin.Click += (s, e) =>
+                {
+                    string pinVal = (txtPin.Text ?? "").Trim();
+                    if (pinVal.Length < 4)
+                    {
+                        MessageBox.Show("Veuillez saisir un PIN d'au moins 4 caractères (ex: 2026 ou AG2026).", "Vote en Direct — PIN trop court", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    string saveResp = CallLocalApi("/api/ppt-action?op=set_cohost_pin&pin=" + Uri.EscapeDataString(pinVal), 10000);
+                    Log("OnClickCohostAccess(set_cohost_pin) -> " + saveResp);
+                    if (saveResp.StartsWith("PIN_SAVED|"))
+                    {
+                        updateStatusUi(true);
+                        txtPin.Text = "";
+                        MessageBox.Show(
+                            "Votre PIN Co-animateur a été enregistré dans Supabase (empreinte sécurisée SHA-256).\r\n\r\n" +
+                            "Votre co-animateur peut maintenant ouvrir le lien /regie (ou scanner le QR Code) et saisir ce PIN.",
+                            "Vote en Direct — PIN Régie Enregistré",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                    }
+                    else
+                    {
+                        MessageBox.Show("Impossible d'enregistrer le PIN :\r\n" + (string.IsNullOrEmpty(saveResp) ? "Le serveur local n'a pas répondu." : saveResp), "Vote en Direct — Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                Button btnDisable = new Button()
+                {
+                    Left = 18,
+                    Top = 472,
+                    Width = 240,
+                    Height = 32,
+                    Text = "Désactiver l'accès Régie",
+                    ForeColor = Color.FromArgb(185, 28, 28)
+                };
+                btnDisable.Click += (s, e) =>
+                {
+                    DialogResult dr = MessageBox.Show(
+                        "Voulez-vous désactiver l'accès Co-animateur (/regie) pour cette séance ?\r\n\r\nLe co-animateur sera automatiquement déconnecté jusqu'à ce que vous définissiez un nouveau PIN.",
+                        "Vote en Direct — Désactiver l'Accès Régie",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question,
+                        MessageBoxDefaultButton.Button2
+                    );
+                    if (dr != DialogResult.Yes) return;
+                    string disResp = CallLocalApi("/api/ppt-action?op=set_cohost_pin&disable=1", 10000);
+                    Log("OnClickCohostAccess(disable) -> " + disResp);
+                    if (disResp.StartsWith("DISABLED|"))
+                    {
+                        updateStatusUi(false);
+                        MessageBox.Show("L'accès Régie (/regie) est désormais désactivé.", "Vote en Direct — Accès Régie Désactivé", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Erreur lors de la désactivation : " + disResp, "Vote en Direct", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                Button btnClose = new Button()
+                {
+                    Left = 388,
+                    Top = 524,
+                    Width = 120,
+                    Height = 34,
+                    Text = "Fermer",
+                    DialogResult = DialogResult.Cancel
+                };
+
+                dlg.Controls.Add(lblIntro);
+                dlg.Controls.Add(picQr);
+                dlg.Controls.Add(lblUrlTitle);
+                dlg.Controls.Add(txtUrl);
+                dlg.Controls.Add(btnCopyUrl);
+                dlg.Controls.Add(lblPinStatus);
+                dlg.Controls.Add(lblPinPrompt);
+                dlg.Controls.Add(txtPin);
+                dlg.Controls.Add(btnSavePin);
+                dlg.Controls.Add(btnDisable);
+                dlg.Controls.Add(btnClose);
+                dlg.CancelButton = btnClose;
+
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Vote en Direct");
+            }
         }
     }
 }

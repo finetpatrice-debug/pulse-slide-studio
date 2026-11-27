@@ -27,6 +27,8 @@ jobs:
           touch dist/.nojekyll
           mkdir -p dist/join/38NKMQ
           cp dist/index.html dist/join/38NKMQ/index.html
+          mkdir -p dist/regie
+          cp dist/index.html dist/regie/index.html
         env:
           VITE_SUPABASE_URL: https://ztjppnonfccdytvgpqrl.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_kaNBOm-Q29rHSWImjMnWAg_E0QB16Eu
