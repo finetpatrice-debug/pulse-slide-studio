@@ -1,13 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$dllPath = Join-Path $projectRoot "addin\VoteEnDirectAddin_v4.dll"
+$dllPath = Join-Path $projectRoot "addin\VoteEnDirectAddin_v28.dll"
 $csPath = Join-Path $projectRoot "addin\VoteEnDirectAddin.cs"
 $cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 Write-Host "1. Compilation de la mise a jour du complement PowerPoint..." -ForegroundColor Cyan
 if (Test-Path $dllPath) { Rename-Item $dllPath "$dllPath.bak_$([DateTime]::Now.Ticks)" -ErrorAction SilentlyContinue }
-& $cscPath /target:library /out:$dllPath $csPath /r:Microsoft.CSharp.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /nologo | Out-Null
+& $cscPath /target:library /out:$dllPath $csPath /r:Microsoft.CSharp.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Xml.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /nologo | Out-Null
 
 $clsid = "{8F4E3A21-9C1B-4D7E-A623-5E12B890C4D1}"
 $progId = "VoteEnDirect.Addin"
@@ -32,7 +32,7 @@ New-Item -Path $inproc -Force | Out-Null
 Set-ItemProperty -Path $inproc -Name "(Default)" -Value "mscoree.dll"
 Set-ItemProperty -Path $inproc -Name "ThreadingModel" -Value "Both"
 Set-ItemProperty -Path $inproc -Name "Class" -Value $className
-Set-ItemProperty -Path $inproc -Name "Assembly" -Value "VoteEnDirectAddin_v4, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
+Set-ItemProperty -Path $inproc -Name "Assembly" -Value "VoteEnDirectAddin_v28, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
 Set-ItemProperty -Path $inproc -Name "RuntimeVersion" -Value "v4.0.30319"
 Set-ItemProperty -Path $inproc -Name "CodeBase" -Value $codeBaseUri
 

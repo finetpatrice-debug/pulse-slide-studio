@@ -153,7 +153,7 @@ namespace VoteEnDirect
         public void OnConnection(object Application, int ConnectMode, object AddInInst, ref Array custom)
         {
             _pptApp = Application;
-            Log("OnConnection called (v21)");
+            Log("OnConnection called (v28)");
             DisableHeavyThirdPartyAddins();
             EnsureViteServerRunning();
             StartInProcessPollingTimer();
@@ -1661,6 +1661,7 @@ namespace VoteEnDirect
 
         public string GetCustomUI(string RibbonID)
         {
+            Log("GetCustomUI called for: " + (RibbonID ?? "null"));
             return @"<customUI xmlns=""http://schemas.microsoft.com/office/2009/07/customui"">
   <ribbon>
     <tabs>
@@ -1697,10 +1698,17 @@ namespace VoteEnDirect
           <button id=""BtnClearVotants""
                   label=""Réinitialiser la Séance""
                   size=""large""
-                  imageMso=""Delete""
+                  imageMso=""Undo""
                   screentip=""Réinitialiser les connexions GSM et les codes à 4 chiffres pour une nouvelle séance""
                   supertip=""Déconnecte les GSM et remet la liste officielle des e-mails en attente de 1re connexion.""
                   onAction=""OnClickClearVotants"" />
+          <button id=""BtnPurgeAllEmails""
+                  label=""Supprimer Tous les E-mails""
+                  size=""large""
+                  imageMso=""Delete""
+                  screentip=""Supprimer définitivement toutes les adresses e-mail de la liste et de la base de données""
+                  supertip=""Efface entièrement la liste des participants (liste-votants.csv) ainsi que toutes les adresses e-mail enregistrées dans la base de données Supabase.""
+                  onAction=""OnClickPurgeAllEmails"" />
         </group>
         <group id=""GrpScrutin"" label=""2. Vote du Texte (OUI / NON / ABSTENTION)"">
           <button id=""BtnVoteSlide""
@@ -2577,6 +2585,25 @@ namespace VoteEnDirect
                     refreshList();
                 };
 
+                Button btnPurgeAll = new Button()
+                {
+                    Left = 476,
+                    Top = 512,
+                    Width = 202,
+                    Height = 34,
+                    Text = "Supprimer tous les e-mails",
+                    ForeColor = Color.FromArgb(185, 28, 28),
+                    Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+                };
+                btnPurgeAll.Click += (s, e) =>
+                {
+                    if (PurgeAllEmailsWithConfirmation())
+                    {
+                        allEntries = LoadVoterDirectoryEntries();
+                        refreshList();
+                    }
+                };
+
                 Button btnClose = new Button()
                 {
                     Left = 688,
@@ -2596,6 +2623,7 @@ namespace VoteEnDirect
                 dlg.Controls.Add(lv);
                 dlg.Controls.Add(btnAddMissing);
                 dlg.Controls.Add(btnRefresh);
+                dlg.Controls.Add(btnPurgeAll);
                 dlg.Controls.Add(btnClose);
                 dlg.CancelButton = btnClose;
 
@@ -2630,6 +2658,70 @@ namespace VoteEnDirect
             {
                 MessageBox.Show("Erreur : " + ex.Message, "Vote en Direct");
             }
+        }
+
+        private bool PurgeAllEmailsWithConfirmation()
+        {
+            try
+            {
+                DialogResult dr = MessageBox.Show(
+                    "Voulez-vous vraiment supprimer TOUTES les adresses e-mail de la liste locale (liste-votants.csv) et de la base de données Supabase ?\r\n\r\n" +
+                    "Attention : cette action est définitive. Elle effacera l'ensemble des participants inscrits, leurs codes à 4 chiffres et les votes associés dans cette séance.",
+                    "Vote en Direct — Supprimer Tous les E-mails",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2
+                );
+                if (dr != DialogResult.Yes)
+                {
+                    return false;
+                }
+
+                EnsureViteServerRunning();
+                string resp = CallLocalApi("/api/ppt-action?op=purge_all_emails", 12000);
+                if (string.IsNullOrEmpty(resp))
+                {
+                    Thread.Sleep(1500);
+                    resp = CallLocalApi("/api/ppt-action?op=purge_all_emails", 12000);
+                }
+                Log("OnClickPurgeAllEmails -> " + resp);
+
+                if (resp.StartsWith("PURGED|"))
+                {
+                    string countStr = resp.Substring(7).Trim();
+                    MessageBox.Show(
+                        "Toutes les adresses e-mail (" + countStr + " participant(s)) ont été supprimées de la liste locale et de la base de données Supabase.\r\n\r\n" +
+                        "Vous pouvez maintenant importer une nouvelle liste de participants (Excel / CSV) ou ajouter des adresses manuellement.",
+                        "Vote en Direct — Adresses E-mail Supprimées",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                    return true;
+                }
+                else
+                {
+                    string errDetail = string.IsNullOrEmpty(resp)
+                        ? "Le serveur local (port 5173) n'a pas répondu."
+                        : resp;
+                    MessageBox.Show(
+                        "Impossible de supprimer toutes les adresses e-mail :\r\n" + errDetail,
+                        "Vote en Direct — Erreur de Suppression",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Vote en Direct");
+                return false;
+            }
+        }
+
+        public void OnClickPurgeAllEmails(object control)
+        {
+            PurgeAllEmailsWithConfirmation();
         }
 
         public void OnClickVoteSlide(object control)

@@ -463,6 +463,83 @@ function localVoteApiPlugin(): Plugin {
             return;
           }
 
+          if (op === 'purge_all_emails') {
+            const sessionIdStr = String(session.id);
+            const prevCsvCount = loadAllowedVotersFromCsv().length;
+            const prevLocalCount = (db.participants || []).length;
+            let prevSbCount = 0;
+
+            if (sb) {
+              try {
+                const { count } = await sb
+                  .from('participants')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('session_id', sessionIdStr);
+                prevSbCount = count || 0;
+              } catch {}
+
+              const { error: qErr } = await sb
+                .from('questions')
+                .update({ is_open: false })
+                .eq('session_id', sessionIdStr);
+              if (qErr) {
+                res.statusCode = 500;
+                res.end('ERR|Supabase questions: ' + qErr.message);
+                return;
+              }
+
+              const { error: sErr } = await sb
+                .from('sessions')
+                .update({ active_question_id: null, show_results: false })
+                .eq('id', sessionIdStr);
+              if (sErr) {
+                res.statusCode = 500;
+                res.end('ERR|Supabase sessions: ' + sErr.message);
+                return;
+              }
+
+              const { error: vErr } = await sb
+                .from('votes')
+                .delete()
+                .eq('session_id', sessionIdStr);
+              if (vErr) {
+                res.statusCode = 500;
+                res.end('ERR|Supabase votes: ' + vErr.message);
+                return;
+              }
+
+              const { error: pErr } = await sb
+                .from('participants')
+                .delete()
+                .eq('session_id', sessionIdStr);
+              if (pErr) {
+                res.statusCode = 500;
+                res.end('ERR|Supabase participants: ' + pErr.message);
+                return;
+              }
+            }
+
+            fs.writeFileSync(
+              VOTERS_CSV_FILE,
+              '# Liste officielle des votants autorisés (Format: email;Nom Prénom)\r\n',
+              'utf-8'
+            );
+
+            db.participants = [];
+            db.votes = [];
+            session.active_question_id = null;
+            session.show_results = false;
+            for (const q of db.questions || []) {
+              q.is_open = false;
+            }
+            saveServerDb(db);
+
+            const deletedCount = Math.max(prevCsvCount, prevLocalCount, prevSbCount);
+            res.statusCode = 200;
+            res.end(`PURGED|${deletedCount}`);
+            return;
+          }
+
           if (op === 'reload_voters') {
             const prune = urlObj.searchParams.get('prune') === '1';
             const resetPins = urlObj.searchParams.get('reset') === '1';
